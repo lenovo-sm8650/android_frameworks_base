@@ -2717,10 +2717,49 @@ public class ApplicationPackageManager extends PackageManager {
         }
     }
 
+    /* TB520FU: report the Play Store as the installer of the apps picked in
+     * Custom Tweaks, so apps that require a Play install source (for example
+     * Notein) keep working. Only the app itself sees it: other apps, the Play
+     * Store included, still get the real installer. The list is
+     * Settings.Global tb520fu_play_installer_apps (package names separated by
+     * ';'), read live through the settings provider, so a change applies
+     * without a restart and apps need no extra SELinux access.
+     */
+    private static final String TB520FU_PLAY_STORE_PACKAGE = "com.android.vending";
+    private static final String TB520FU_PLAY_INSTALLER_APPS = "tb520fu_play_installer_apps";
+
+    private boolean tb520fuReportPlayInstaller(String packageName, String installer) {
+        if (packageName == null || TB520FU_PLAY_STORE_PACKAGE.equals(installer)
+                || !packageName.equals(mContext.getPackageName())) {
+            return false;
+        }
+        final String apps;
+        try {
+            apps = Settings.Global.getString(mContext.getContentResolver(),
+                    TB520FU_PLAY_INSTALLER_APPS);
+        } catch (RuntimeException e) {
+            // Isolated processes cannot reach the settings provider.
+            return false;
+        }
+        if (TextUtils.isEmpty(apps)) {
+            return false;
+        }
+        for (String app : apps.split(";")) {
+            if (packageName.equals(app)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public String getInstallerPackageName(String packageName) {
         try {
-            return mPM.getInstallerPackageName(packageName);
+            final String installer = mPM.getInstallerPackageName(packageName);
+            if (tb520fuReportPlayInstaller(packageName, installer)) {
+                return TB520FU_PLAY_STORE_PACKAGE;
+            }
+            return installer;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2737,6 +2776,14 @@ public class ApplicationPackageManager extends PackageManager {
         }
         if (installSourceInfo == null) {
             throw new NameNotFoundException(packageName);
+        }
+        if (tb520fuReportPlayInstaller(packageName,
+                installSourceInfo.getInstallingPackageName())) {
+            return new InstallSourceInfo(installSourceInfo.getInitiatingPackageName(),
+                    installSourceInfo.getInitiatingPackageSigningInfo(),
+                    installSourceInfo.getOriginatingPackageName(), TB520FU_PLAY_STORE_PACKAGE,
+                    installSourceInfo.getUpdateOwnerPackageName(),
+                    installSourceInfo.getPackageSource());
         }
         return installSourceInfo;
     }
