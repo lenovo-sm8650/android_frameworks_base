@@ -481,6 +481,9 @@ public final class ColorDisplayService extends SystemService {
                             case Secure.DISPLAY_WHITE_BALANCE_ENABLED:
                                 updateDisplayWhiteBalanceStatus();
                                 break;
+                            case DISPLAY_WHITE_BALANCE_STRENGTH:
+                                onDisplayWhiteBalanceStrengthChanged();
+                                break;
                             case Secure.REDUCE_BRIGHT_COLORS_ACTIVATED:
                                 onReduceBrightColorsActivationChanged(/*userInitiated*/ true);
                                 mHandler.sendEmptyMessage(MSG_APPLY_REDUCE_BRIGHT_COLORS);
@@ -515,6 +518,8 @@ public final class ColorDisplayService extends SystemService {
         cr.registerContentObserver(System.getUriFor(System.DISPLAY_COLOR_MODE),
                 false /* notifyForDescendants */, mContentObserver, mCurrentUser);
         cr.registerContentObserver(Secure.getUriFor(Secure.DISPLAY_WHITE_BALANCE_ENABLED),
+                false /* notifyForDescendants */, mContentObserver, mCurrentUser);
+        cr.registerContentObserver(Secure.getUriFor(DISPLAY_WHITE_BALANCE_STRENGTH),
                 false /* notifyForDescendants */, mContentObserver, mCurrentUser);
         cr.registerContentObserver(Secure.getUriFor(Secure.REDUCE_BRIGHT_COLORS_ACTIVATED),
                 false /* notifyForDescendants */, mContentObserver, mCurrentUser);
@@ -1018,6 +1023,36 @@ public final class ColorDisplayService extends SystemService {
 
         // Check if the local time has passed, if so return the same time tomorrow.
         return ldt.isBefore(compareTime) ? ldt.plusDays(1) : ldt;
+    }
+
+    /**
+     * How strongly display white balance follows the ambient light, in percent. The target CCT
+     * is pulled towards the nominal white point: 100 is the AOSP behaviour, 0 disables the tint.
+     */
+    private static final String DISPLAY_WHITE_BALANCE_STRENGTH = "display_white_balance_strength";
+    private static final int DISPLAY_WHITE_BALANCE_STRENGTH_DEFAULT = 100;
+
+    /** Last CCT requested by DisplayWhiteBalanceController, before the strength is applied. */
+    private int mRequestedDisplayWhiteBalanceCct = -1;
+
+    private int scaleDisplayWhiteBalanceCct(int cct) {
+        final int nominal = getContext().getResources()
+                .getInteger(R.integer.config_displayWhiteBalanceColorTemperatureDefault);
+        final int strength = Math.max(0, Math.min(100, Secure.getIntForUser(
+                getContext().getContentResolver(), DISPLAY_WHITE_BALANCE_STRENGTH,
+                DISPLAY_WHITE_BALANCE_STRENGTH_DEFAULT, mCurrentUser)));
+        return nominal + Math.round((cct - nominal) * strength / 100f);
+    }
+
+    private void onDisplayWhiteBalanceStrengthChanged() {
+        if (mRequestedDisplayWhiteBalanceCct <= 0) {
+            return;
+        }
+        mDisplayWhiteBalanceTintController.setTargetCct(
+                scaleDisplayWhiteBalanceCct(mRequestedDisplayWhiteBalanceCct));
+        if (mDisplayWhiteBalanceTintController.isActivated()) {
+            mHandler.sendEmptyMessage(MSG_APPLY_DISPLAY_WHITE_BALANCE);
+        }
     }
 
     @VisibleForTesting
@@ -1760,7 +1795,8 @@ public final class ColorDisplayService extends SystemService {
          */
         public boolean setDisplayWhiteBalanceColorTemperature(int cct) {
             // Update the transform target CCT even if it can't be applied.
-            mDisplayWhiteBalanceTintController.setTargetCct(cct);
+            mRequestedDisplayWhiteBalanceCct = cct;
+            mDisplayWhiteBalanceTintController.setTargetCct(scaleDisplayWhiteBalanceCct(cct));
 
             if (mDisplayWhiteBalanceTintController.isActivated()) {
                 mHandler.sendEmptyMessage(MSG_APPLY_DISPLAY_WHITE_BALANCE);
