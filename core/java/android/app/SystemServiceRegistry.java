@@ -57,6 +57,7 @@ import android.app.haptic.ZuiPenHapticManager;
 import android.app.job.JobSchedulerFrameworkInitializer;
 import android.app.lskfreset.ILskfResetManager;
 import android.app.lskfreset.LskfResetManager;
+import android.app.keyboard.LenovoKeyboardManager;
 import android.app.modes.ContextualModeManager;
 import android.app.ondeviceintelligence.OnDeviceIntelligenceFrameworkInitializer;
 import android.app.people.PeopleManager;
@@ -419,6 +420,15 @@ public final class SystemServiceRegistry {
                 IBinder b = ServiceManager.getServiceOrThrow(Context.ACCOUNT_SERVICE);
                 IAccountManager service = IAccountManager.Stub.asInterface(b);
                 return new AccountManager(ctx, service);
+            }});
+
+        // Lenovo keyboard firmware updater access, served by the device's
+        // DeviceKeyHandler (TB520FU)
+        registerService(LenovoKeyboardManager.SERVICE, LenovoKeyboardManager.class,
+                new CachedServiceFetcher<LenovoKeyboardManager>() {
+            @Override
+            public LenovoKeyboardManager createService(ContextImpl ctx) {
+                return new LenovoKeyboardManager(ctx);
             }});
 
         registerService(Context.ACTIVITY_SERVICE, ActivityManager.class,
