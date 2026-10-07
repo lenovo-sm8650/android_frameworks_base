@@ -146,6 +146,53 @@ public class PropImitationHooks {
         OFFSET_FIELD = offsetField;
     }
 
+    // Device identity shown to selected apps, from Custom Tweaks:
+    // Settings.Global lenovo_device_spoof_apps = "pkg=brand|manufacturer|model;...".
+    // While the key is unset, config_deviceSpoofApps applies (same
+    // entries; a bare package name uses config_deviceSpoof{Brand,
+    // Manufacturer,Model}). Empty fields keep the real value. The defaults are
+    // empty, so a build without an overlay changes nothing.
+    private static final String DEVICE_SPOOF_APPS = "lenovo_device_spoof_apps";
+
+    /** Applies the device identity if the app is selected; true if anything changed. */
+    private static boolean setDeviceSpoofProps(Context context, Resources res, String packageName) {
+        if (android.os.Process.isIsolated()) {
+            return false;
+        }
+        try {
+            final String apps = Settings.Global.getString(context.getContentResolver(),
+                    DEVICE_SPOOF_APPS);
+            final String[] entries = apps != null ? apps.split(";")
+                    : res.getStringArray(R.array.config_deviceSpoofApps);
+            for (String entry : entries) {
+                final int eq = entry.indexOf('=');
+                final String pkg = eq >= 0 ? entry.substring(0, eq) : entry;
+                if (!pkg.equals(packageName)) {
+                    continue;
+                }
+                final String[] fields = eq >= 0 ? entry.substring(eq + 1).split("\\|", -1)
+                        : new String[] {
+                            res.getString(R.string.config_deviceSpoofBrand),
+                            res.getString(R.string.config_deviceSpoofManufacturer),
+                            res.getString(R.string.config_deviceSpoofModel),
+                        };
+                final String[] props = {"BRAND", "MANUFACTURER", "MODEL"};
+                boolean changed = false;
+                for (int i = 0; i < props.length && i < fields.length; i++) {
+                    if (!TextUtils.isEmpty(fields[i])) {
+                        dlog("Device spoof: " + props[i] + " = " + fields[i]);
+                        setPropValue(props[i], fields[i]);
+                        changed = true;
+                    }
+                }
+                return changed;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to read the device spoof settings", e);
+        }
+        return false;
+    }
+
     public static void setProps(Context context) {
         final String packageName = context.getPackageName();
         final String processName = Application.getProcessName();
@@ -168,6 +215,13 @@ public class PropImitationHooks {
         sIsGms = packageName.equals(PACKAGE_GMS) && processName.equals(PROCESS_GMS_UNSTABLE);
         sIsFinsky = packageName.equals(PACKAGE_FINSKY);
         sIsPhotos = packageName.equals(PACKAGE_GPHOTOS);
+
+        // The selected apps of Custom Tweaks see another device instead of
+        // the other spoofs below. Play services and the Play Store never do.
+        if (!sIsGms && !sIsFinsky && !packageName.equals(PACKAGE_GMS)
+                && setDeviceSpoofProps(context, res, packageName)) {
+            return;
+        }
 
         /* Set Certified Properties for GMSCore
          * Set Stock Fingerprint for ARCore
