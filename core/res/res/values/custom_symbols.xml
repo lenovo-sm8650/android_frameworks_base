@@ -127,4 +127,7 @@
 
    <!-- Defines the actions shown in advanced reboot submenu -->
    <java-symbol type="array" name="config_restartActionsList" />
+
+   <!-- Lenovo pen writing haptics -->
+   <java-symbol type="array" name="config_stylus_pen_haptic_packages" />
 </resources>

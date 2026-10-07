@@ -53,6 +53,7 @@ import android.app.contentsuggestions.ContentSuggestionsManager;
 import android.app.contentsuggestions.IContentSuggestionsManager;
 import android.app.contextualsearch.ContextualSearchManager;
 import android.app.ecm.EnhancedConfirmationFrameworkInitializer;
+import android.app.haptic.ZuiPenHapticManager;
 import android.app.job.JobSchedulerFrameworkInitializer;
 import android.app.lskfreset.ILskfResetManager;
 import android.app.lskfreset.LskfResetManager;
@@ -401,6 +402,14 @@ public final class SystemServiceRegistry {
             @Override
             public CaptioningManager createService(ContextImpl ctx) {
                 return new CaptioningManager(ctx);
+            }});
+
+        // Lenovo pen haptics, served by the device's DeviceKeyHandler (TB520FU)
+        registerService(ZuiPenHapticManager.SERVICE, ZuiPenHapticManager.class,
+                new CachedServiceFetcher<ZuiPenHapticManager>() {
+            @Override
+            public ZuiPenHapticManager createService(ContextImpl ctx) {
+                return new ZuiPenHapticManager(ctx);
             }});
 
         registerService(Context.ACCOUNT_SERVICE, AccountManager.class,

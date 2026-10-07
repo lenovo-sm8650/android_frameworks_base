@@ -133,6 +133,14 @@ public final class RotationPolicy {
     }
 
     /**
+     * Pre-caller variant, still called by prebuilt vendor apps (Lenovo PenService).
+     */
+    public static void setRotationLockAtAngle(Context context, final boolean enabled,
+            final int rotation) {
+        setRotationLockAtAngle(context, enabled, rotation, "RotationPolicy#legacy");
+    }
+
+    /**
      * Enables or disables rotation lock at a specific rotation from system UI.
      */
     public static void setRotationLockAtAngle(Context context, final boolean enabled,

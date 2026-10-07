@@ -165,4 +165,9 @@
        <item>restart_recovery</item>
        <item>restart_bootloader</item>
    </string-array>
+
+    <!-- Apps offered for Lenovo pen writing haptics (ZUI config, read by
+         PenService with getIdentifier); devices overlay the list. -->
+    <string-array name="config_stylus_pen_haptic_packages" translatable="false">
+    </string-array>
 </resources>
