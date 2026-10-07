@@ -21,6 +21,7 @@ import android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN
 import android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED
 import android.app.WindowConfiguration.windowingModeToString
 import android.content.Context
+import android.database.ContentObserver
 import android.hardware.devicestate.DeviceState
 import android.hardware.devicestate.DeviceStateManager
 import android.hardware.input.InputManager
@@ -127,8 +128,47 @@ class DesktopDisplayModeController(
             }
         }
 
+    /**
+     * Whether an attached keyboard and touchpad make the default display desktop-first. The
+     * user picks it like on the stock Lenovo system ("System mode when a keyboard is connected",
+     * Settings.System [KEYBOARD_SYSTEM_MODE]: 0 tablet, 1 or unset desktop), and can leave
+     * desktop mode for the current attachment ([KEYBOARD_DESKTOP_MODE_EXITED] = 1, reset by the
+     * device when the keyboard is detached) like with the stock exit button.
+     */
+    private val keyboardDesktopModeObserver =
+        object : ContentObserver(mainHandler) {
+            override fun onChange(selfChange: Boolean) {
+                updateDefaultDisplayWindowingMode()
+            }
+        }
+
+    /** PC mode requested from the quick settings tile ([PC_MODE] = 1), with or without a keyboard. */
+    private fun isPcModeRequested(): Boolean =
+        Settings.Global.getInt(context.contentResolver, PC_MODE, 0) != 0
+
+    private fun isKeyboardDesktopFirstAllowed(): Boolean {
+        val resolver = context.contentResolver
+        return Settings.System.getInt(resolver, KEYBOARD_SYSTEM_MODE, 0) != 0 &&
+            Settings.Global.getInt(resolver, KEYBOARD_DESKTOP_MODE_EXITED, 0) == 0
+    }
+
     init {
         shellInit.addInitCallback({ onInit() }, this)
+        context.contentResolver.registerContentObserver(
+            Settings.System.getUriFor(KEYBOARD_SYSTEM_MODE),
+            false,
+            keyboardDesktopModeObserver,
+        )
+        context.contentResolver.registerContentObserver(
+            Settings.Global.getUriFor(KEYBOARD_DESKTOP_MODE_EXITED),
+            false,
+            keyboardDesktopModeObserver,
+        )
+        context.contentResolver.registerContentObserver(
+            Settings.Global.getUriFor(PC_MODE),
+            false,
+            keyboardDesktopModeObserver,
+        )
         inputManager.registerInputDeviceListener(inputDeviceListener, mainHandler)
         if (Flags.enableDesktopFirstLaptopStateBugfix()) {
             deviceStateManager.registerCallback(mainExecutor, deviceStateCallback)
@@ -263,6 +303,10 @@ class DesktopDisplayModeController(
             if (isExtendedDisplayEnabled && hasExternalDisplay) {
                 return true
             }
+            if (isPcModeRequested()) {
+                logV("canDesktopFirstModeBeEnabledOnDefaultDisplay: PC mode requested")
+                return true
+            }
             val hasAnyTouchpadDevice = hasAnyTouchpadDevice()
             val hasAnyPhysicalKeyboardDevice = hasAnyPhysicalKeyboardDevice()
             logV(
@@ -271,7 +315,10 @@ class DesktopDisplayModeController(
                 hasAnyTouchpadDevice,
                 hasAnyPhysicalKeyboardDevice,
             )
-            if (hasAnyTouchpadDevice && hasAnyPhysicalKeyboardDevice) {
+            if (
+                hasAnyTouchpadDevice && hasAnyPhysicalKeyboardDevice &&
+                    isKeyboardDesktopFirstAllowed()
+            ) {
                 return true
             }
             if (Flags.enableDesktopFirstLaptopStateBugfix()) {
@@ -364,6 +411,7 @@ class DesktopDisplayModeController(
         pw.println("isDefaultDisplayDesktopEligible=" + isDefaultDisplayDesktopEligible())
         pw.println("isExtendedDisplayEnabled=" + isExtendedDisplayEnabled())
         pw.println("hasExternalDisplay=" + hasExternalDisplay())
+        pw.println("isPcModeRequested=" + isPcModeRequested())
         pw.println(
             "FORCE_DESKTOP_FIRST_ON_DEFAULT_DISPLAY=" + FORCE_DESKTOP_FIRST_ON_DEFAULT_DISPLAY
         )
@@ -382,6 +430,10 @@ class DesktopDisplayModeController(
     }
 
     companion object {
+        const val KEYBOARD_SYSTEM_MODE = "enter_work_mode_from_keyboard"
+        const val KEYBOARD_DESKTOP_MODE_EXITED = "tb520fu_keyboard_desktop_mode_exited"
+        const val PC_MODE = "tb520fu_pc_mode"
+
         private const val TAG = "DesktopDisplayModeController"
     }
 }
