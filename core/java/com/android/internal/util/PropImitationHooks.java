@@ -22,6 +22,7 @@ import android.app.ActivityTaskManager;
 import android.app.Application;
 import android.app.TaskStackListener;
 import android.content.ComponentName;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Resources;
 import android.os.Build;
@@ -146,6 +147,63 @@ public class PropImitationHooks {
         OFFSET_FIELD = offsetField;
     }
 
+    // Device identity shown to selected apps, from Custom Tweaks. Each key is
+    // in Settings.Global; while a key is unset, the overlayable default
+    // (config_tb520fuDeviceSpoof*) applies. The defaults are empty, so a
+    // build without an overlay changes nothing.
+    private static final String DEVICE_SPOOF_ENABLED = "tb520fu_device_spoof_enabled";
+    private static final String DEVICE_SPOOF_APPS = "tb520fu_device_spoof_apps";
+    private static final String DEVICE_SPOOF_BRAND = "tb520fu_device_spoof_brand";
+    private static final String DEVICE_SPOOF_MANUFACTURER = "tb520fu_device_spoof_manufacturer";
+    private static final String DEVICE_SPOOF_MODEL = "tb520fu_device_spoof_model";
+
+    /** Applies the device identity if the app is selected; true if anything changed. */
+    private static boolean setDeviceSpoofProps(Context context, Resources res, String packageName) {
+        if (android.os.Process.isIsolated()) {
+            return false;
+        }
+        try {
+            final ContentResolver cr = context.getContentResolver();
+            final String enabled = Settings.Global.getString(cr, DEVICE_SPOOF_ENABLED);
+            if (enabled != null ? !"1".equals(enabled)
+                    : !res.getBoolean(R.bool.config_tb520fuDeviceSpoofEnabled)) {
+                return false;
+            }
+            final String apps = Settings.Global.getString(cr, DEVICE_SPOOF_APPS);
+            final List<String> selected = apps != null
+                    ? Arrays.asList(apps.split(";"))
+                    : Arrays.asList(res.getStringArray(R.array.config_tb520fuDeviceSpoofApps));
+            if (!selected.contains(packageName)) {
+                return false;
+            }
+            boolean changed = false;
+            changed |= setDeviceSpoofProp(cr, DEVICE_SPOOF_BRAND,
+                    res.getString(R.string.config_tb520fuDeviceSpoofBrand), "BRAND");
+            changed |= setDeviceSpoofProp(cr, DEVICE_SPOOF_MANUFACTURER,
+                    res.getString(R.string.config_tb520fuDeviceSpoofManufacturer), "MANUFACTURER");
+            changed |= setDeviceSpoofProp(cr, DEVICE_SPOOF_MODEL,
+                    res.getString(R.string.config_tb520fuDeviceSpoofModel), "MODEL");
+            return changed;
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to read the device spoof settings", e);
+            return false;
+        }
+    }
+
+    private static boolean setDeviceSpoofProp(ContentResolver cr, String key, String def,
+            String field) {
+        String value = Settings.Global.getString(cr, key);
+        if (value == null) {
+            value = def;
+        }
+        if (TextUtils.isEmpty(value)) {
+            return false;
+        }
+        dlog("Device spoof: " + field + " = " + value);
+        setPropValue(field, value);
+        return true;
+    }
+
     public static void setProps(Context context) {
         final String packageName = context.getPackageName();
         final String processName = Application.getProcessName();
@@ -168,6 +226,13 @@ public class PropImitationHooks {
         sIsGms = packageName.equals(PACKAGE_GMS) && processName.equals(PROCESS_GMS_UNSTABLE);
         sIsFinsky = packageName.equals(PACKAGE_FINSKY);
         sIsPhotos = packageName.equals(PACKAGE_GPHOTOS);
+
+        // The selected apps of Custom Tweaks see another device instead of
+        // the other spoofs below. Play services and the Play Store never do.
+        if (!sIsGms && !sIsFinsky && !packageName.equals(PACKAGE_GMS)
+                && setDeviceSpoofProps(context, res, packageName)) {
+            return;
+        }
 
         /* Set Certified Properties for GMSCore
          * Set Stock Fingerprint for ARCore

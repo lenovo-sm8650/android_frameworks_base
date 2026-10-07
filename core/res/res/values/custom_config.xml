@@ -135,6 +135,15 @@
     <!-- Device model (Build.MODEL) to spoof for netflix, if not empty -->
     <string name="config_netflixSpoofModel" translatable="false"></string>
 
+    <!-- Device identity shown to the selected apps (Custom Tweaks; the
+         Settings.Global tb520fu_device_spoof_* keys override these). Empty
+         values are not changed. -->
+    <bool name="config_tb520fuDeviceSpoofEnabled">false</bool>
+    <string-array name="config_tb520fuDeviceSpoofApps" translatable="false" />
+    <string name="config_tb520fuDeviceSpoofBrand" translatable="false"></string>
+    <string name="config_tb520fuDeviceSpoofManufacturer" translatable="false"></string>
+    <string name="config_tb520fuDeviceSpoofModel" translatable="false"></string>
+
    <!-- API URL to fetch PIF from -->
    <string name="config_pifUpdateUrl" translatable="false">https://raw.githubusercontent.com/PixelOS-AOSP/official_devices/{version}/API/updater/CertifiedProps/certified_build_props.json</string>
 
