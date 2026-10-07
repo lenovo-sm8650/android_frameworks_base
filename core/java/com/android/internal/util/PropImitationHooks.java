@@ -22,7 +22,6 @@ import android.app.ActivityTaskManager;
 import android.app.Application;
 import android.app.TaskStackListener;
 import android.content.ComponentName;
-import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Resources;
 import android.os.Build;
@@ -147,15 +146,13 @@ public class PropImitationHooks {
         OFFSET_FIELD = offsetField;
     }
 
-    // Device identity shown to selected apps, from Custom Tweaks. Each key is
-    // in Settings.Global; while a key is unset, the overlayable default
-    // (config_tb520fuDeviceSpoof*) applies. The defaults are empty, so a
-    // build without an overlay changes nothing.
-    private static final String DEVICE_SPOOF_ENABLED = "tb520fu_device_spoof_enabled";
+    // Device identity shown to selected apps, from Custom Tweaks:
+    // Settings.Global tb520fu_device_spoof_apps = "pkg=brand|manufacturer|model;...".
+    // While the key is unset, config_tb520fuDeviceSpoofApps applies (same
+    // entries; a bare package name uses config_tb520fuDeviceSpoof{Brand,
+    // Manufacturer,Model}). Empty fields keep the real value. The defaults are
+    // empty, so a build without an overlay changes nothing.
     private static final String DEVICE_SPOOF_APPS = "tb520fu_device_spoof_apps";
-    private static final String DEVICE_SPOOF_BRAND = "tb520fu_device_spoof_brand";
-    private static final String DEVICE_SPOOF_MANUFACTURER = "tb520fu_device_spoof_manufacturer";
-    private static final String DEVICE_SPOOF_MODEL = "tb520fu_device_spoof_model";
 
     /** Applies the device identity if the app is selected; true if anything changed. */
     private static boolean setDeviceSpoofProps(Context context, Resources res, String packageName) {
@@ -163,45 +160,37 @@ public class PropImitationHooks {
             return false;
         }
         try {
-            final ContentResolver cr = context.getContentResolver();
-            final String enabled = Settings.Global.getString(cr, DEVICE_SPOOF_ENABLED);
-            if (enabled != null ? !"1".equals(enabled)
-                    : !res.getBoolean(R.bool.config_tb520fuDeviceSpoofEnabled)) {
-                return false;
+            final String apps = Settings.Global.getString(context.getContentResolver(),
+                    DEVICE_SPOOF_APPS);
+            final String[] entries = apps != null ? apps.split(";")
+                    : res.getStringArray(R.array.config_tb520fuDeviceSpoofApps);
+            for (String entry : entries) {
+                final int eq = entry.indexOf('=');
+                final String pkg = eq >= 0 ? entry.substring(0, eq) : entry;
+                if (!pkg.equals(packageName)) {
+                    continue;
+                }
+                final String[] fields = eq >= 0 ? entry.substring(eq + 1).split("\\|", -1)
+                        : new String[] {
+                            res.getString(R.string.config_tb520fuDeviceSpoofBrand),
+                            res.getString(R.string.config_tb520fuDeviceSpoofManufacturer),
+                            res.getString(R.string.config_tb520fuDeviceSpoofModel),
+                        };
+                final String[] props = {"BRAND", "MANUFACTURER", "MODEL"};
+                boolean changed = false;
+                for (int i = 0; i < props.length && i < fields.length; i++) {
+                    if (!TextUtils.isEmpty(fields[i])) {
+                        dlog("Device spoof: " + props[i] + " = " + fields[i]);
+                        setPropValue(props[i], fields[i]);
+                        changed = true;
+                    }
+                }
+                return changed;
             }
-            final String apps = Settings.Global.getString(cr, DEVICE_SPOOF_APPS);
-            final List<String> selected = apps != null
-                    ? Arrays.asList(apps.split(";"))
-                    : Arrays.asList(res.getStringArray(R.array.config_tb520fuDeviceSpoofApps));
-            if (!selected.contains(packageName)) {
-                return false;
-            }
-            boolean changed = false;
-            changed |= setDeviceSpoofProp(cr, DEVICE_SPOOF_BRAND,
-                    res.getString(R.string.config_tb520fuDeviceSpoofBrand), "BRAND");
-            changed |= setDeviceSpoofProp(cr, DEVICE_SPOOF_MANUFACTURER,
-                    res.getString(R.string.config_tb520fuDeviceSpoofManufacturer), "MANUFACTURER");
-            changed |= setDeviceSpoofProp(cr, DEVICE_SPOOF_MODEL,
-                    res.getString(R.string.config_tb520fuDeviceSpoofModel), "MODEL");
-            return changed;
         } catch (Exception e) {
             Log.e(TAG, "Failed to read the device spoof settings", e);
-            return false;
         }
-    }
-
-    private static boolean setDeviceSpoofProp(ContentResolver cr, String key, String def,
-            String field) {
-        String value = Settings.Global.getString(cr, key);
-        if (value == null) {
-            value = def;
-        }
-        if (TextUtils.isEmpty(value)) {
-            return false;
-        }
-        dlog("Device spoof: " + field + " = " + value);
-        setPropValue(field, value);
-        return true;
+        return false;
     }
 
     public static void setProps(Context context) {

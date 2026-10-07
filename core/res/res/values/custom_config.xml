@@ -136,9 +136,10 @@
     <string name="config_netflixSpoofModel" translatable="false"></string>
 
     <!-- Device identity shown to the selected apps (Custom Tweaks; the
-         Settings.Global tb520fu_device_spoof_* keys override these). Empty
-         values are not changed. -->
-    <bool name="config_tb520fuDeviceSpoofEnabled">false</bool>
+         Settings.Global tb520fu_device_spoof_apps key overrides the list).
+         Entries are "package" or "package=brand|manufacturer|model"; a bare
+         package uses the brand, manufacturer and model below. Empty values
+         are not changed. -->
     <string-array name="config_tb520fuDeviceSpoofApps" translatable="false" />
     <string name="config_tb520fuDeviceSpoofBrand" translatable="false"></string>
     <string name="config_tb520fuDeviceSpoofManufacturer" translatable="false"></string>
