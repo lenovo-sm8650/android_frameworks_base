@@ -172,6 +172,7 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.BLASTBufferQueue;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ForceDarkType;
@@ -219,6 +220,7 @@ import android.os.Trace;
 import android.os.UserHandle;
 import android.os.VibrationAttributes;
 import android.os.Vibrator;
+import android.provider.Settings;
 import android.sysprop.DisplayProperties;
 import android.sysprop.ViewProperties;
 import android.text.TextUtils;
@@ -8962,6 +8964,11 @@ public final class ViewRootImpl implements ViewParent,
         if (pointerIcon == null) {
             pointerIcon = mView.onResolvePointerIcon(event, pointerIndex);
         }
+        if (pointerIcon == null && event.isStylusPointer() && tb520fuPenHoverPointer()) {
+            // TB520FU: the default stylus icon is empty; the Lenovo pen setting
+            // "Show pointer when hovering" asks for a visible one.
+            pointerIcon = tb520fuPenHoverIcon();
+        }
         if (pointerIcon == null) {
             pointerIcon = PointerIcon.getSystemIcon(mContext, PointerIcon.TYPE_NOT_SPECIFIED);
         }
@@ -8974,6 +8981,52 @@ public final class ViewRootImpl implements ViewParent,
                 .setPointerIcon(pointerIcon, event.getDisplayId(),
                         event.getDeviceId(), event.getPointerId(0), getInputToken());
         return true;
+    }
+
+    /**
+     * TB520FU: the stock PenService writes its "Show pointer when hovering"
+     * switch to Settings.Global stylus_change_icon as "type:show" (stock ZUI
+     * input service format, "1:0" = off); read live through the settings
+     * cache, so a change applies on the next hover.
+     */
+    // TB520FU: the system hover spot (TYPE_SPOT_HOVER, 24dp) at 16dp, closer to
+    // the stock ZUI pen pointer. Kept per density.
+    private static final float TB520FU_PEN_HOVER_ICON_SCALE = 16f / 24f;
+    private static PointerIcon sTb520fuPenHoverIcon;
+    private static float sTb520fuPenHoverIconDensity;
+
+    private PointerIcon tb520fuPenHoverIcon() {
+        final float density = mContext.getResources().getDisplayMetrics().density;
+        synchronized (ViewRootImpl.class) {
+            if (sTb520fuPenHoverIcon == null || sTb520fuPenHoverIconDensity != density) {
+                final Bitmap spot = PointerIcon.getLoadedSystemIcon(mContext,
+                        PointerIcon.TYPE_SPOT_HOVER, false, TB520FU_PEN_HOVER_ICON_SCALE)
+                        .getBitmap();
+                if (spot == null) {
+                    return PointerIcon.getSystemIcon(mContext, PointerIcon.TYPE_SPOT_HOVER);
+                }
+                // The spot is round: its hot spot is the centre.
+                sTb520fuPenHoverIcon = PointerIcon.create(spot,
+                        spot.getWidth() / 2f, spot.getHeight() / 2f);
+                sTb520fuPenHoverIconDensity = density;
+            }
+            return sTb520fuPenHoverIcon;
+        }
+    }
+
+    private boolean tb520fuPenHoverPointer() {
+        try {
+            final String value = Settings.Global.getString(mContext.getContentResolver(),
+                    "stylus_change_icon");
+            if (value == null) {
+                return false;
+            }
+            final int colon = value.indexOf(':');
+            return colon >= 0 && "1".equals(value.substring(colon + 1).trim());
+        } catch (RuntimeException e) {
+            // Isolated processes cannot reach the settings provider.
+            return false;
+        }
     }
 
     private void maybeUpdateTooltip(MotionEvent event) {
