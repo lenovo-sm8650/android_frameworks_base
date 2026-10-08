@@ -217,11 +217,8 @@ public class PropImitationHooks {
         sIsPhotos = packageName.equals(PACKAGE_GPHOTOS);
 
         // The selected apps of Custom Tweaks see another device instead of
-        // the other spoofs below. Play services never do; the Play Store does
-        // when it is selected (it then lists the apps of that device, without
-        // the certified properties below, which Play Integrity takes from
-        // Play services).
-        if (!sIsGms && !packageName.equals(PACKAGE_GMS)
+        // the other spoofs below. Play services and the Play Store never do.
+        if (!sIsGms && !sIsFinsky && !packageName.equals(PACKAGE_GMS)
                 && setDeviceSpoofProps(context, res, packageName)) {
             return;
         }
