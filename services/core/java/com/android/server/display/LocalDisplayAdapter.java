@@ -607,6 +607,11 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             // Load brightness HWC quirk
             mBacklightAdapter.setForceSurfaceControl(mDisplayDeviceConfig.hasQuirk(
                     DisplayDeviceConfig.QUIRK_CAN_SET_BRIGHTNESS_VIA_HWC));
+
+            // Lenovo: the high brightness mode of the panel as the top of the backlight scale
+            if (mBacklightAdapter.mHbmBridge == null) {
+                mBacklightAdapter.mHbmBridge = LenovoHbmBridge.create(mDisplayDeviceConfig);
+            }
         }
 
         private boolean updateStaticInfo(SurfaceControl.StaticDisplayInfo info) {
@@ -1887,6 +1892,9 @@ final class LocalDisplayAdapter extends DisplayAdapter {
 
         private boolean mForceSurfaceControl = false;
 
+        /** The high brightness mode of the panel (Lenovo), if the display has it. */
+        LenovoHbmBridge mHbmBridge;
+
         /**
          * @param displayToken Token for display associated with this backlight.
          * @param isFirstDisplay {@code true} if it is the first display.
@@ -1909,6 +1917,14 @@ final class LocalDisplayAdapter extends DisplayAdapter {
 
         // Set backlight within min and max backlight values
         void setBacklight(float sdrBacklight, float sdrNits, float backlight, float nits) {
+            if (mHbmBridge != null) {
+                // the display backlight first: it turns the mode on or off, the SDR one follows it
+                backlight = mHbmBridge.toComposer(backlight, nits, true);
+                if (!BrightnessSynchronizer.floatEquals(
+                        sdrBacklight, PowerManager.BRIGHTNESS_INVALID_FLOAT)) {
+                    sdrBacklight = mHbmBridge.toComposer(sdrBacklight, sdrNits, false);
+                }
+            }
             if (mUseSurfaceControlBrightness || mForceSurfaceControl) {
                 if (BrightnessSynchronizer.floatEquals(
                         sdrBacklight, PowerManager.BRIGHTNESS_INVALID_FLOAT)) {
