@@ -97,18 +97,11 @@ sealed class BatteryViewModel(
     private val _colorProfile: Flow<ColorProfile> =
         combine(interactor.batteryAttributionType, interactor.isCritical) { attr, isCritical ->
             when (attr) {
-                Charging ->
+                Charging,
+                Defend ->
                     ColorProfile(
                         dark = BatteryColors.DarkTheme.Charging,
                         light = BatteryColors.LightTheme.Charging,
-                    )
-
-                // Charging is paused by the battery defender: plugged in, but not charging, so the
-                // icon keeps the colors of the unplugged battery and only gets the shield
-                Defend ->
-                    ColorProfile(
-                        dark = BatteryColors.DarkTheme.Default,
-                        light = BatteryColors.LightTheme.Default,
                     )
 
                 PowerSave ->
