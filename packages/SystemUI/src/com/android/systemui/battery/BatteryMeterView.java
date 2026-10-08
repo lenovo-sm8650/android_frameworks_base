@@ -299,9 +299,10 @@ public class BatteryMeterView extends LinearLayout implements DarkReceiver {
             boolean isCharging,
             boolean isLowBattery
     ) {
+        // Charging is paused by the battery defender: plugged in, but not charging
+        if (isBatteryDefender && !isPowerSave) return ColorProfile.None;
         if (isCharging)  return ColorProfile.Active;
         if (isPowerSave) return ColorProfile.Warning;
-        if (isBatteryDefender) return ColorProfile.None;
         if (isLowBattery) return ColorProfile.Error;
 
         return ColorProfile.None;
