@@ -24,12 +24,14 @@ import android.content.Context
 import android.database.ContentObserver
 import android.hardware.devicestate.DeviceState
 import android.hardware.devicestate.DeviceStateManager
+import android.hardware.display.DisplayManager
 import android.hardware.input.InputManager
 import android.os.Handler
 import android.os.SystemProperties
 import android.provider.Settings
 import android.provider.Settings.Global.DEVELOPMENT_FORCE_DESKTOP_MODE_ON_EXTERNAL_DISPLAYS
 import android.util.IndentingPrintWriter
+import android.view.Display
 import android.view.Display.DEFAULT_DISPLAY
 import android.view.IWindowManager
 import android.view.InputDevice
@@ -146,6 +148,16 @@ class DesktopDisplayModeController(
     private fun isPcModeRequested(): Boolean =
         Settings.Global.getInt(context.contentResolver, PC_MODE, 0) != 0
 
+    /**
+     * Whether an extended external display (a monitor or a WiFi display) makes the default display
+     * desktop-first. The user can leave desktop mode for the current connection from the quick
+     * settings tile ([EXTERNAL_DISPLAY_DESKTOP_MODE_EXITED] = 1, reset when the last external
+     * display goes away).
+     */
+    private fun isExternalDisplayDesktopFirstAllowed(): Boolean =
+        Settings.Global.getInt(context.contentResolver, EXTERNAL_DISPLAY_DESKTOP_MODE_EXITED, 0) ==
+            0
+
     private fun isKeyboardDesktopFirstAllowed(): Boolean {
         val resolver = context.contentResolver
         return Settings.System.getInt(resolver, KEYBOARD_SYSTEM_MODE, 0) != 0 &&
@@ -166,6 +178,11 @@ class DesktopDisplayModeController(
         )
         context.contentResolver.registerContentObserver(
             Settings.Global.getUriFor(PC_MODE),
+            false,
+            keyboardDesktopModeObserver,
+        )
+        context.contentResolver.registerContentObserver(
+            Settings.Global.getUriFor(EXTERNAL_DISPLAY_DESKTOP_MODE_EXITED),
             false,
             keyboardDesktopModeObserver,
         )
@@ -210,6 +227,12 @@ class DesktopDisplayModeController(
 
     fun updateDefaultDisplayWindowingMode() {
         if (!DesktopExperienceFlags.ENABLE_DISPLAY_WINDOWING_MODE_SWITCHING.isTrue) return
+
+        // The next external display starts in desktop mode again. Ask the display manager: the
+        // display areas of a display that is going away can still be listed here.
+        if (!isExternalDisplayDesktopFirstAllowed() && !isExternalDisplayConnected()) {
+            Settings.Global.putInt(context.contentResolver, EXTERNAL_DISPLAY_DESKTOP_MODE_EXITED, 0)
+        }
 
         updateDisplayWindowingMode(DEFAULT_DISPLAY, getTargetWindowingModeForDefaultDisplay())
     }
@@ -300,7 +323,10 @@ class DesktopDisplayModeController(
                 isExtendedDisplayEnabled,
                 hasExternalDisplay,
             )
-            if (isExtendedDisplayEnabled && hasExternalDisplay) {
+            if (
+                isExtendedDisplayEnabled && hasExternalDisplay &&
+                    isExternalDisplayDesktopFirstAllowed()
+            ) {
                 return true
             }
             if (isPcModeRequested()) {
@@ -363,6 +389,12 @@ class DesktopDisplayModeController(
 
     private fun hasExternalDisplay() =
         rootTaskDisplayAreaOrganizer.getDisplayIds().any { it != DEFAULT_DISPLAY }
+
+    private fun isExternalDisplayConnected() =
+        context.getSystemService(DisplayManager::class.java)?.displays?.any {
+            it.displayId != DEFAULT_DISPLAY &&
+                (it.type == Display.TYPE_EXTERNAL || it.type == Display.TYPE_WIFI)
+        } ?: false
 
     private fun hasAnyTouchpadDevice() =
         inputManager.inputDeviceIds.any { deviceId ->
@@ -433,6 +465,8 @@ class DesktopDisplayModeController(
         const val KEYBOARD_SYSTEM_MODE = "enter_work_mode_from_keyboard"
         const val KEYBOARD_DESKTOP_MODE_EXITED = "tb520fu_keyboard_desktop_mode_exited"
         const val PC_MODE = "tb520fu_pc_mode"
+        const val EXTERNAL_DISPLAY_DESKTOP_MODE_EXITED =
+            "tb520fu_external_display_desktop_mode_exited"
 
         private const val TAG = "DesktopDisplayModeController"
     }
