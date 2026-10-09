@@ -47,6 +47,7 @@ import android.view.SurfaceControl;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 
+import com.android.internal.inputmethod.StylusHandwritingState;
 import com.android.server.LocalServices;
 import com.android.server.input.InputManagerInternal;
 import com.android.server.wm.WindowManagerInternal;
@@ -360,6 +361,7 @@ final class HandwritingModeController {
     }
 
     private void reset(boolean reinitializing) {
+        StylusHandwritingState.finish();
         if (mHandwritingEventReceiver != null) {
             mHandwritingEventReceiver.dispose();
             mHandwritingEventReceiver = null;
