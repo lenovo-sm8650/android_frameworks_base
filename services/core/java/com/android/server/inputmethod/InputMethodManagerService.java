@@ -174,6 +174,7 @@ import com.android.internal.inputmethod.InputMethodSubtypeSafeList;
 import com.android.internal.inputmethod.SoftInputShowHideReason;
 import com.android.internal.inputmethod.StartInputFlags;
 import com.android.internal.inputmethod.StartInputReason;
+import com.android.internal.inputmethod.StylusHandwritingState;
 import com.android.internal.inputmethod.UnbindReason;
 import com.android.internal.lineage.hardware.LineageHardwareManager;
 import com.android.internal.os.TransferPipe;
@@ -2862,6 +2863,7 @@ public final class InputMethodManagerService implements IInputMethodManagerImpl.
      */
     @GuardedBy("ImfLock.class")
     void onImeDisconnected(@UserIdInt int userId) {
+        if (userId == mCurrentImeUserId) StylusHandwritingState.finish();
         // TODO(b/324907325): Remove the suppress warnings once b/324907325 is fixed.
         @SuppressWarnings("GuardedBy") Consumer<ClientState> clearClientSession = c -> {
             // TODO(b/305849394): Figure out what we should do for single user IME mode.
@@ -3351,6 +3353,7 @@ public final class InputMethodManagerService implements IInputMethodManagerImpl.
         if (curIme != null) {
             curIme.removeStylusHandwritingWindow();
         }
+        if (userId == mCurrentImeUserId) StylusHandwritingState.finish();
         final long ident = Binder.clearCallingIdentity();
         try {
             setSelectedInputMethodAndSubtypeLocked(imi, subtypeIndex, false, userId);
@@ -5197,6 +5200,7 @@ public final class InputMethodManagerService implements IInputMethodManagerImpl.
     @BinderThread
     @GuardedBy("ImfLock.class")
     private void resetStylusHandwritingLocked(int requestId) {
+        StylusHandwritingState.finish();
         final OptionalInt curRequest = mHwController.getCurrentRequestId();
         if (curRequest.isEmpty() || curRequest.getAsInt() != requestId) {
             Slog.w(TAG, "IME requested to finish handwriting with a mismatched requestId: "
@@ -5544,11 +5548,20 @@ public final class InputMethodManagerService implements IInputMethodManagerImpl.
                         // When failed to issue IPCs, re-initialize handwriting state.
                         Slog.w(TAG, "Resetting handwriting mode.");
                         scheduleResetStylusHandwriting();
+                    } else {
+                        final String imeId = bindingController.getSelectedImeId();
+                        final ComponentName ime = imeId != null
+                                ? ComponentName.unflattenFromString(imeId) : null;
+                        if (ime != null) {
+                            StylusHandwritingState.start(
+                                    ime.getPackageName(), bindingController.getCurDisplayId());
+                        }
                     }
                 }
                 return true;
             case MSG_FINISH_HANDWRITING:
                 synchronized (ImfLock.class) {
+                    StylusHandwritingState.finish();
                     final IInputMethodInvoker curIme = getInputMethodBindingController(
                             mCurrentImeUserId).getCurIme();
                     if (curIme != null && mHwController.getCurrentRequestId().isPresent()) {
@@ -5558,6 +5571,7 @@ public final class InputMethodManagerService implements IInputMethodManagerImpl.
                 return true;
             case MSG_REMOVE_HANDWRITING_WINDOW:
                 synchronized (ImfLock.class) {
+                    StylusHandwritingState.finish();
                     final IInputMethodInvoker curIme = getInputMethodBindingController(
                             mCurrentImeUserId).getCurIme();
                     if (curIme != null) {
