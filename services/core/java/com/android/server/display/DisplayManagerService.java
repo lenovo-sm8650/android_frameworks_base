@@ -6552,6 +6552,11 @@ public final class DisplayManagerService extends SystemService {
     final class LocalService extends DisplayManagerInternal {
 
         @Override
+        public void onStylusDetected() {
+            mDisplayModeDirector.onStylusDetected();
+        }
+
+        @Override
         public void initPowerManagement(final DisplayPowerCallbacks callbacks, Handler handler,
                 SensorManager sensorManager) {
             synchronized (mSyncRoot) {

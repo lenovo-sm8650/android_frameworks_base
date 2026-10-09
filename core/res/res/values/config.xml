@@ -8077,4 +8077,17 @@
 
     <!-- Whether to explicitly disable the Video capability over IWLAN when Wi-Fi Calling is turned off. -->
     <bool name="config_disable_video_capability_when_wfc_off">false</bool>
+
+    <!-- Scan code of the key a touchscreen sends, without a key code, when it detects a stylus
+         near the screen. -1 when it sends none. -->
+    <integer name="config_stylusDetectScanCode">-1</integer>
+
+    <!-- Refresh rates of the default display at which its touchscreen cannot track a stylus.
+         While a stylus is detected near the screen (config_stylusDetectScanCode), the display
+         leaves them. -->
+    <integer-array name="config_stylusIncompatibleRefreshRates" />
+
+    <!-- Time after the last stylus detection before the display may return to the refresh
+         rates of config_stylusIncompatibleRefreshRates. -->
+    <integer name="config_stylusRefreshRateTimeoutMs">10000</integer>
 </resources>

@@ -471,6 +471,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     SensorPrivacyManager mSensorPrivacyManager;
     DisplayManager mDisplayManager;
     DisplayManagerInternal mDisplayManagerInternal;
+    // Scan code of the key the touchscreen sends when it detects a stylus nearby, or -1.
+    private int mStylusDetectScanCode;
     UserManagerInternal mUserManagerInternal;
     DockObserverInternal mDockObserverInternal;
 
@@ -2379,6 +2381,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mSensorPrivacyManager = mContext.getSystemService(SensorPrivacyManager.class);
         mDisplayManager = mContext.getSystemService(DisplayManager.class);
         mDisplayManagerInternal = LocalServices.getService(DisplayManagerInternal.class);
+        mStylusDetectScanCode = mContext.getResources().getInteger(
+                com.android.internal.R.integer.config_stylusDetectScanCode);
         mUserManagerInternal = LocalServices.getService(UserManagerInternal.class);
         mPackageManager = mContext.getPackageManager();
         mHasFeatureWatch = mPackageManager.hasSystemFeature(FEATURE_WATCH);
@@ -4593,6 +4597,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         boolean isWakeKey = (policyFlags & WindowManagerPolicy.FLAG_WAKE) != 0
                 || event.isWakeKey();
         boolean isKeyGestureTriggered = (policyFlags & FLAG_KEY_GESTURE_TRIGGERED) != 0;
+
+        // The touchscreen reports a stylus nearby with a key that has no key code. It only
+        // matters to the display refresh rate; apps never see it.
+        if (mStylusDetectScanCode >= 0 && keyCode == KeyEvent.KEYCODE_UNKNOWN
+                && event.getScanCode() == mStylusDetectScanCode) {
+            if (down && mDisplayManagerInternal != null) {
+                mDisplayManagerInternal.onStylusDetected();
+            }
+            return 0;
+        }
 
         // There are key events that perform the operation as the current user,
         // and these should be ignored for visible background users.
