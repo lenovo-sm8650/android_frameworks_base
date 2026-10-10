@@ -124,12 +124,17 @@ class SettingsObserverTest {
 
     @Test
     @DisableFlags(Flags.FLAG_ENABLE_WORK_DURATIONS)
-    fun testLowPowerMode(@TestParameter testCase: LowPowerTestCase) {
+    fun testLowPowerMode(
+        @TestParameter testCase: LowPowerTestCase,
+        @TestParameter limitRefreshRate: Boolean
+    ) {
         whenever(spyContext.contentResolver)
                 .thenReturn(settingsProviderRule.mockContentResolver(null))
         val lowPowerModeSetting = if (testCase.lowPowerModeEnabled) 1 else 0
         Settings.Global.putInt(
                 spyContext.contentResolver, Settings.Global.LOW_POWER_MODE, lowPowerModeSetting)
+        Settings.System.putInt(spyContext.contentResolver,
+            Settings.System.LOW_POWER_REFRESH_RATE, if (limitRefreshRate) 1 else 0)
 
         val displayModeDirector = DisplayModeDirector(
             spyContext, testHandler, mockInjector, mockFlags,
@@ -145,9 +150,50 @@ class SettingsObserverTest {
                 false, Settings.Global.getUriFor(Settings.Global.LOW_POWER_MODE), 1)
 
         assertThat(displayModeDirector.getVote(VotesStorage.GLOBAL_ID,
-                Vote.PRIORITY_LOW_POWER_MODE_RENDER_RATE)).isEqualTo(testCase.globalVote)
+                Vote.PRIORITY_LOW_POWER_MODE_RENDER_RATE))
+            .isEqualTo(if (limitRefreshRate) testCase.globalVote else null)
         assertThat(displayModeDirector.getVote(Display.DEFAULT_DISPLAY,
-            Vote.PRIORITY_LOW_POWER_MODE_MODES)).isEqualTo(testCase.displayVote)
+            Vote.PRIORITY_LOW_POWER_MODE_MODES))
+            .isEqualTo(if (limitRefreshRate) testCase.displayVote else null)
+    }
+
+    @Test
+    @DisableFlags(Flags.FLAG_ENABLE_WORK_DURATIONS)
+    fun testLowPowerRefreshRate_defaultOff_toggleWhileBatterySaverOn() {
+        mContext.orCreateTestableResources.addOverride(
+            com.android.internal.R.bool.config_lowPowerRefreshRateDefault, false)
+        Settings.System.putString(mContext.contentResolver,
+            Settings.System.LOW_POWER_REFRESH_RATE, null)
+        Settings.Global.putInt(mContext.contentResolver, Settings.Global.LOW_POWER_MODE, 1)
+
+        val director = DisplayModeDirector(mContext, testHandler, mockInjector, mockFlags,
+            mockDisplayDeviceConfigProvider, mockModeRequestManager)
+        whenever(mockDeviceConfig.refreshRateData).thenReturn(LOW_POWER_REFRESH_RATE_DATA)
+        director.injectDisplayDeviceConfigByDisplay(SparseArray<DisplayDeviceConfig>().apply {
+            put(Display.DEFAULT_DISPLAY, mockDeviceConfig)
+        })
+        val observer = director.SettingsObserver(mContext, testHandler, mockFlags)
+        val uri = Settings.System.getUriFor(Settings.System.LOW_POWER_REFRESH_RATE)
+
+        observer.onChange(false, uri, 0)
+        assertThat(director.getVote(VotesStorage.GLOBAL_ID,
+            Vote.PRIORITY_LOW_POWER_MODE_RENDER_RATE)).isNull()
+        assertThat(director.getVote(Display.DEFAULT_DISPLAY,
+            Vote.PRIORITY_LOW_POWER_MODE_MODES)).isNull()
+
+        Settings.System.putInt(mContext.contentResolver, Settings.System.LOW_POWER_REFRESH_RATE, 1)
+        observer.onChange(false, uri, 0)
+        assertThat(director.getVote(VotesStorage.GLOBAL_ID,
+            Vote.PRIORITY_LOW_POWER_MODE_RENDER_RATE)).isEqualTo(LOW_POWER_GLOBAL_VOTE)
+        assertThat(director.getVote(Display.DEFAULT_DISPLAY,
+            Vote.PRIORITY_LOW_POWER_MODE_MODES)).isEqualTo(EXPECTED_SUPPORTED_MODES_VOTE)
+
+        Settings.System.putInt(mContext.contentResolver, Settings.System.LOW_POWER_REFRESH_RATE, 0)
+        observer.onChange(false, uri, 0)
+        assertThat(director.getVote(VotesStorage.GLOBAL_ID,
+            Vote.PRIORITY_LOW_POWER_MODE_RENDER_RATE)).isNull()
+        assertThat(director.getVote(Display.DEFAULT_DISPLAY,
+            Vote.PRIORITY_LOW_POWER_MODE_MODES)).isNull()
     }
 
     enum class LowPowerTestCase(
@@ -276,12 +322,14 @@ class SettingsObserverTest {
 
     @Test
     @EnableFlags(Flags.FLAG_ENABLE_WORK_DURATIONS)
-    fun testLowPowerMode_workDurationsInVotes() {
+    fun testLowPowerMode_workDurationsInVotes(@TestParameter limitRefreshRate: Boolean) {
         val configDefaultPeakRefreshRateId = 0x10e0075
         mContext.orCreateTestableResources.addOverride(configDefaultPeakRefreshRateId, 60)
 
         Settings.Global.putInt(
             mContext.contentResolver, Settings.Global.LOW_POWER_MODE, 1)
+        Settings.System.putInt(mContext.contentResolver, Settings.System.LOW_POWER_REFRESH_RATE,
+            if (limitRefreshRate) 1 else 0)
 
         val displayModeDirector = DisplayModeDirector(
             mContext, testHandler, mockInjector, mockFlags, mockDisplayDeviceConfigProvider,
@@ -297,12 +345,12 @@ class SettingsObserverTest {
             false, Settings.Global.getUriFor(Settings.Global.LOW_POWER_MODE), 1)
 
         assertThat(displayModeDirector.getVote(0, Vote.PRIORITY_LOW_POWER_MODE_MODES))
-            .isEqualTo(CombinedVote(
+            .isEqualTo(if (limitRefreshRate) CombinedVote(
                 listOf(
                     EXPECTED_SUPPORTED_MODES_VOTE,
                     EXPECTED_WORK_DURATIONS_VOTE
                 )
-            ))
+            ) else EXPECTED_WORK_DURATIONS_VOTE)
     }
 
     @Test
@@ -313,6 +361,8 @@ class SettingsObserverTest {
 
         Settings.Global.putInt(
             mContext.contentResolver, Settings.Global.LOW_POWER_MODE, 1)
+        Settings.System.putInt(
+            mContext.contentResolver, Settings.System.LOW_POWER_REFRESH_RATE, 1)
 
         val displayModeDirector = DisplayModeDirector(
             mContext, testHandler, mockInjector, mockFlags,
