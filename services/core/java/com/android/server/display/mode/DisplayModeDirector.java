@@ -853,6 +853,7 @@ public class DisplayModeDirector {
                 case MSG_SWITCH_USER: {
                     synchronized (mLock) {
                         mSettingsObserver.updateRefreshRateSettingLocked();
+                        mSettingsObserver.updateLowPowerModeSettingLocked();
                         mSettingsObserver.updateModeSwitchingTypeSettingLocked();
                     }
                     break;
@@ -1047,6 +1048,7 @@ public class DisplayModeDirector {
         private float mDefaultRefreshRate;
 
         private boolean mIsLowPower = false;
+        private boolean mShouldLimitRefreshRate;
 
         private final DisplayManager.DisplayListener mDisplayListener =
                 new DisplayManager.DisplayListener() {
@@ -1108,7 +1110,7 @@ public class DisplayModeDirector {
             cr.registerContentObserver(mMatchContentFrameRateSetting,
                     /* notifyDescendants= */ false, this, UserHandle.USER_ALL);
             cr.registerContentObserver(mLowPowerRefreshRateSetting,
-                    /* notifyDescendants= */ false, this, UserHandle.USER_SYSTEM);
+                    /* notifyDescendants= */ false, this, UserHandle.USER_ALL);
             mInjector.registerDisplayListener(mDisplayListener, mHandler);
 
             float deviceConfigDefaultPeakRefresh =
@@ -1193,10 +1195,13 @@ public class DisplayModeDirector {
         private void updateLowPowerModeSettingLocked() {
             mIsLowPower = Settings.Global.getInt(mContext.getContentResolver(),
                     Settings.Global.LOW_POWER_MODE, 0 /*default*/) != 0;
-            boolean shouldSwitchRefreshRate = Settings.System.getInt(mContext.getContentResolver(),
-                    Settings.System.LOW_POWER_REFRESH_RATE, 1 /*default*/) != 0;
+            final int defaultValue = mContext.getResources().getBoolean(
+                    R.bool.config_lowPowerRefreshRateDefault) ? 1 : 0;
+            mShouldLimitRefreshRate = Settings.System.getIntForUser(mContext.getContentResolver(),
+                    Settings.System.LOW_POWER_REFRESH_RATE, defaultValue,
+                    UserHandle.USER_CURRENT) != 0;
             final Vote vote;
-            if (mIsLowPower && shouldSwitchRefreshRate) {
+            if (mIsLowPower && mShouldLimitRefreshRate) {
                 vote = Vote.forRenderFrameRates(0f, 60f);
             } else {
                 vote = null;
@@ -1216,6 +1221,8 @@ public class DisplayModeDirector {
                     }
                     List<SupportedModeData> supportedModes = config
                             .getRefreshRateData().lowPowerSupportedModes;
+                    Vote refreshRateVote = mShouldLimitRefreshRate
+                            ? Vote.forSupportedRefreshRates(supportedModes) : null;
                     Vote vote;
                     if (Flags.enableWorkDurations()) {
                         WorkDuration lowPowerWorkDurations = null;
@@ -1224,10 +1231,10 @@ public class DisplayModeDirector {
                                     config.getRefreshRateData().lowPowerWorkDurations;
                         }
                         vote = Vote.forVotes(Arrays.asList(
-                                Vote.forSupportedRefreshRates(supportedModes),
+                                refreshRateVote,
                                 Vote.forWorkDurations(lowPowerWorkDurations)));
                     } else {
-                        vote = Vote.forSupportedRefreshRates(supportedModes);
+                        vote = refreshRateVote;
                     }
                     mVotesStorage.updateVote(
                             mDisplayDeviceConfigByDisplay.keyAt(i),

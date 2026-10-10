@@ -6023,6 +6023,9 @@
          non-zero. -->
     <integer name="config_defaultPeakRefreshRate">0</integer>
 
+    <!-- Default for the user-controlled Battery Saver refresh rate limit. -->
+    <bool name="config_lowPowerRefreshRateDefault">true</bool>
+
     <!-- External display peak refresh rate for the given device. Change this value if you want to
          prevent the framework from using higher refresh rates, even if display modes with higher
          refresh rates are available from hardware composer. Only has an effect if this value and
