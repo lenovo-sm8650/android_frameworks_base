@@ -101,6 +101,13 @@ public abstract class DisplayManagerInternal {
     public abstract boolean isProximitySensorAvailable(int displayId);
 
     /**
+     * Called when the touchscreen of the default display detects a stylus nearby, see
+     * config_stylusDetectScanCode.
+     */
+    public void onStylusDetected() {
+    }
+
+    /**
      * Registers a display group listener which will be informed of the addition, removal, or change
      * of display groups.
      *

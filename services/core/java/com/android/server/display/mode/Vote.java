@@ -154,9 +154,13 @@ interface Vote {
     // set to a high priority.
     int PRIORITY_PROXIMITY = 23;
 
+    // Some touchscreens cannot track a stylus at some refresh rates; keep the display off them
+    // while a stylus is near the screen.
+    int PRIORITY_STYLUS = 24;
+
     // The Under-Display Fingerprint Sensor (UDFPS) needs the refresh rate to be locked in order
     // to function, so this needs to be the highest priority of all votes.
-    int PRIORITY_UDFPS = 24;
+    int PRIORITY_UDFPS = 25;
 
     @IntDef(prefix = { "PRIORITY_" }, value = {
             PRIORITY_DEFAULT_RENDER_FRAME_RATE,
@@ -183,6 +187,7 @@ interface Vote {
             PRIORITY_FLICKER_REFRESH_RATE_SWITCH,
             PRIORITY_SKIN_TEMPERATURE,
             PRIORITY_PROXIMITY,
+            PRIORITY_STYLUS,
             PRIORITY_UDFPS
     })
     @Retention(RetentionPolicy.SOURCE)
@@ -328,6 +333,8 @@ interface Vote {
                 return "PRIORITY_LOW_POWER_MODE_RENDER_RATE";
             case PRIORITY_SKIN_TEMPERATURE:
                 return "PRIORITY_SKIN_TEMPERATURE";
+            case PRIORITY_STYLUS:
+                return "PRIORITY_STYLUS";
             case PRIORITY_UDFPS:
                 return "PRIORITY_UDFPS";
             case PRIORITY_USER_SETTING_MIN_RENDER_FRAME_RATE:

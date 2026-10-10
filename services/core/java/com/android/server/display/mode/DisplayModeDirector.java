@@ -147,6 +147,7 @@ public class DisplayModeDirector {
     private final ProximitySensorObserver mSensorObserver;
     private final HbmObserver mHbmObserver;
     private final SkinThermalStatusObserver mSkinThermalStatusObserver;
+    private final StylusObserver mStylusObserver;
     private final ModeChangeObserver mModeChangeObserver;
 
     private final SystemRequestObserver mSystemRequestObserver;
@@ -231,6 +232,8 @@ public class DisplayModeDirector {
         mSensorObserver = new ProximitySensorObserver(mVotesStorage, injector);
         mSkinThermalStatusObserver = new SkinThermalStatusObserver(injector, mVotesStorage,
                 mDisplayDeviceConfigProvider);
+        mStylusObserver = new StylusObserver(context, mVotesStorage, mHandler,
+                this::getSupportedModes);
         mModeChangeObserver = mInjector.getModeChangeObserver(mVotesStorage, handler.getLooper());
         mHbmObserver = new HbmObserver(injector, mVotesStorage, BackgroundThread.getHandler(),
                 mDeviceConfigDisplaySettings);
@@ -250,6 +253,7 @@ public class DisplayModeDirector {
         // This has to be called first to read the supported display modes that will be used by
         // other observers
         mDisplayObserver.observe();
+        mStylusObserver.observe();
 
         mSettingsObserver.observe();
         mBrightnessObserver.observe(sensorManager);
@@ -286,6 +290,20 @@ public class DisplayModeDirector {
         mBrightnessObserver.setLoggingEnabled(loggingEnabled);
         mSkinThermalStatusObserver.setLoggingEnabled(loggingEnabled);
         mVotesStorage.setLoggingEnabled(loggingEnabled);
+    }
+
+    /**
+     * Called when the touchscreen of the default display detects a stylus nearby.
+     */
+    public void onStylusDetected() {
+        mStylusObserver.onStylusDetected();
+    }
+
+    @Nullable
+    private Display.Mode[] getSupportedModes(int displayId) {
+        synchronized (mLock) {
+            return mSupportedModesByDisplay.get(displayId);
+        }
     }
 
     /**
@@ -633,6 +651,7 @@ public class DisplayModeDirector {
             mUdfpsObserver.dumpLocked(pw);
             mHbmObserver.dumpLocked(pw);
             mSkinThermalStatusObserver.dumpLocked(pw);
+            mStylusObserver.dump(pw);
         }
         mVotesStorage.dump(pw);
         mSensorObserver.dump(pw);
