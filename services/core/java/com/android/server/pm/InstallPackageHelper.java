@@ -222,6 +222,11 @@ final class InstallPackageHelper {
     private static final long WAKELOCK_TIMEOUT_MS = WATCHDOG_TIMEOUT + 1000 * 60;
     private static final String INSTALLER_WAKE_LOCK_TAG = "installer:packages";
 
+    // TB520FU: packages the Play Store may not install or update.
+    private static final String TB520FU_PLAY_STORE = "com.android.vending";
+    private static final Set<String> TB520FU_PLAY_BLOCKED_PACKAGES =
+            Set.of("com.google.android.GoogleCamera");
+
     /**
      * A dedicated thread pool for blocking operations, specifically for waiting on app processes
      * to be killed during package updates. This prevents starvation of shared executors and allows
@@ -1728,6 +1733,22 @@ final class InstallPackageHelper {
 
         String pkgName = parsedPackage.getPackageName();
         request.setName(pkgName);
+        // TB520FU: the Play Store must not install or update Google Camera.
+        // With the certified build fingerprint it offers Pixel Camera, which
+        // does not run here, and it would replace a Google Camera port shipped
+        // with the ROM. Other install sources (adb, file managers) still work.
+        // Only the initiating package counts: it is the real caller, while the
+        // installer name can be set to the Play Store on purpose (adb install
+        // -i com.android.vending, installers with INSTALL_PACKAGES).
+        if (TB520FU_PLAY_BLOCKED_PACKAGES.contains(pkgName)) {
+            final InstallSource source = request.getInstallSource();
+            if (source != null
+                    && TB520FU_PLAY_STORE.equals(source.mInitiatingPackageName)) {
+                Slog.w(TAG, "Play Store install of " + pkgName + " blocked");
+                throw new PrepareFailure(PackageManager.INSTALL_FAILED_USER_RESTRICTED,
+                        "Installing " + pkgName + " from the Play Store is blocked");
+            }
+        }
         if (parsedPackage.isTestOnly()) {
             if ((installFlags & PackageManager.INSTALL_ALLOW_TEST) == 0) {
                 throw new PrepareFailure(INSTALL_FAILED_TEST_ONLY,
