@@ -253,6 +253,7 @@ public class DisplayModeDirector {
         // This has to be called first to read the supported display modes that will be used by
         // other observers
         mDisplayObserver.observe();
+        mStylusObserver.observe();
 
         mSettingsObserver.observe();
         mBrightnessObserver.observe(sensorManager);

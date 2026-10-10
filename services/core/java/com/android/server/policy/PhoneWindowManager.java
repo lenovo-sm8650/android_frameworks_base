@@ -6166,6 +6166,17 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // So it is better not to bind keyguard here.
         mKeyguardDelegate.onSystemReady();
 
+        if (mStylusDetectScanCode >= 0) {
+            // The detection key may stop once the touch controller resumes stylus scanning.
+            // Keep the refresh-rate timeout renewed by real pen input as well, without
+            // consuming the motion events delivered to applications.
+            mWindowManagerFuncs.registerPointerEventListener(event -> {
+                if (event.isStylusPointer() && mDisplayManagerInternal != null) {
+                    mDisplayManagerInternal.onStylusDetected();
+                }
+            }, DEFAULT_DISPLAY);
+        }
+
         mVrManagerInternal = LocalServices.getService(VrManagerInternal.class);
         if (mVrManagerInternal != null) {
             mVrManagerInternal.addPersistentVrModeStateListener(mPersistentVrModeListener);
