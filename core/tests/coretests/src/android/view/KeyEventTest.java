@@ -61,6 +61,17 @@ public final class KeyEventTest {
     @Rule public final Expect expect = Expect.create();
 
     @Test
+    public void testLenovoPenDoubleTapKeyCode() {
+        assertThat(KeyEvent.KEYCODE_PEN_TWO_CLICK).isEqualTo(601);
+        assertThat(KeyEvent.keyCodeFromString("KEYCODE_PEN_TWO_CLICK")).isEqualTo(601);
+        assertThat(KeyEvent.keyCodeFromString("PEN_TWO_CLICK")).isEqualTo(601);
+        assertThat(KeyEvent.keyCodeFromString("601")).isEqualTo(601);
+        assertThat(KeyEvent.keyCodeToString(601)).isEqualTo("KEYCODE_PEN_TWO_CLICK");
+        // Do not accidentally admit the rest of the vendor keycode range.
+        assertThat(KeyEvent.keyCodeFromString("602")).isEqualTo(KeyEvent.KEYCODE_UNKNOWN);
+    }
+
+    @Test
     public void testObtain() {
         KeyEvent keyEvent = KeyEvent.obtain(DOWN_TIME, EVENT_TIME, ACTION, KEYCODE, REPEAT,
                 METASTATE, DEVICE_ID, SCAN_CODE, FLAGS, SOURCE, CHARACTERS);

@@ -1337,6 +1337,13 @@ public class KeyEvent extends InputEvent implements Parcelable {
     public static final int KEYCODE_LOCK = 324;
     /** Key code constant: To toggle fullscreen mode (on the current application). */
     public static final int KEYCODE_FULLSCREEN = 325;
+    /**
+     * Lenovo pen barrel double tap, retained for apps built for ZUI.
+     * This vendor value is outside the AOSP keycode range.
+     * @hide
+     */
+    public static final int KEYCODE_PEN_TWO_CLICK = 601;
+
     /** Key code constant: F13 key. */
     public static final int KEYCODE_F13 = 326;
     /** Key code constant: F14 key. */
@@ -4046,6 +4053,7 @@ public class KeyEvent extends InputEvent implements Parcelable {
      * @see KeyCharacterMap#getDisplayLabel
      */
     public static String keyCodeToString(int keyCode) {
+        if (keyCode == KEYCODE_PEN_TWO_CLICK) return "KEYCODE_PEN_TWO_CLICK";
         String symbolicName = nativeKeyCodeToString(keyCode);
         return symbolicName != null ? LABEL_PREFIX + symbolicName : Integer.toString(keyCode);
     }
@@ -4071,6 +4079,7 @@ public class KeyEvent extends InputEvent implements Parcelable {
         if (symbolicName.startsWith(LABEL_PREFIX)) {
             symbolicName = symbolicName.substring(LABEL_PREFIX.length());
         }
+        if ("PEN_TWO_CLICK".equals(symbolicName)) return KEYCODE_PEN_TWO_CLICK;
         int keyCode = nativeKeyCodeFromString(symbolicName);
         if (keyCodeIsValid(keyCode)) {
             return keyCode;
@@ -4079,7 +4088,8 @@ public class KeyEvent extends InputEvent implements Parcelable {
     }
 
     private static boolean keyCodeIsValid(int keyCode) {
-        return keyCode >= KEYCODE_UNKNOWN && keyCode <= LAST_KEYCODE;
+        return (keyCode >= KEYCODE_UNKNOWN && keyCode <= LAST_KEYCODE)
+                || keyCode == KEYCODE_PEN_TWO_CLICK;
     }
 
     /**

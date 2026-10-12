@@ -28,4 +28,13 @@ public interface DeviceKeyHandler {
      * @return null if event is consumed, KeyEvent to be handled otherwise
      */
     public KeyEvent handleKeyEvent(KeyEvent event);
+
+    /**
+     * Called after the focused application declines a key sequence. Implementations
+     * must return quickly; focusedUid is the owner of the original target window.
+     * @return true if a device-specific fallback consumes the event
+     */
+    default boolean handleUnhandledKeyEvent(KeyEvent event, int focusedUid) {
+        return false;
+    }
 }
