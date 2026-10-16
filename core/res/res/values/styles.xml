@@ -1421,6 +1421,7 @@ please see styles_device_defaults.xml.
         <item name="pointerIconGrab">@drawable/pointer_grab_icon</item>
         <item name="pointerIconGrabbing">@drawable/pointer_grabbing_icon</item>
         <item name="pointerIconHandwriting">@drawable/pointer_handwriting_icon</item>
+        <item name="pointerIconLenovoPenHover">@drawable/pointer_lenovo_pen_hover_vector_icon</item>
     </style>
 
     <style name="LargePointer">
@@ -1458,6 +1459,7 @@ please see styles_device_defaults.xml.
         <item name="pointerIconGrab">@drawable/pointer_grab_large_icon</item>
         <item name="pointerIconGrabbing">@drawable/pointer_grabbing_large_icon</item>
         <item name="pointerIconHandwriting">@drawable/pointer_handwriting_icon</item>
+        <item name="pointerIconLenovoPenHover">@drawable/pointer_lenovo_pen_hover_vector_icon</item>
     </style>
 
     <!-- @hide -->
@@ -1495,6 +1497,7 @@ please see styles_device_defaults.xml.
         <item name="pointerIconGrab">@drawable/pointer_grab_vector_icon</item>
         <item name="pointerIconGrabbing">@drawable/pointer_grabbing_vector_icon</item>
         <item name="pointerIconHandwriting">@drawable/pointer_handwriting_vector_icon</item>
+        <item name="pointerIconLenovoPenHover">@drawable/pointer_lenovo_pen_hover_vector_icon</item>
     </style>
 
     <!-- @hide -->

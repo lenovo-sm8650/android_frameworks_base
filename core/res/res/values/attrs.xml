@@ -10014,6 +10014,8 @@
         <attr name="pointerIconGrabbing" format="reference"/>
         <!-- Reference to a pointer drawable with HANDWRITING. -->
         <attr name="pointerIconHandwriting" format="reference"/>
+        <!-- Reference to a pointer drawable with the Lenovo stylus hover ring. -->
+        <attr name="pointerIconLenovoPenHover" format="reference"/>
     </declare-styleable>
 
     <declare-styleable name="PointerIcon">

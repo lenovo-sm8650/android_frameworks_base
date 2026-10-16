@@ -176,6 +176,14 @@ public class DisplayRotation {
 
     private boolean mAllowSeamlessRotationDespiteNavBarMoving;
 
+    /** Settings.Global pen_ink_mode == 1 (Lenovo pen ink mode is open). */
+    private volatile boolean mInkModeOpen;
+    /**
+     * Settings.Global stylus_drawn_and_screenlock == 1: the stylus drew in ink mode before the
+     * screen turned off, so the rotation stays where it is until the user unlocks.
+     */
+    private volatile boolean mStylusDrawnAndScreenLocked;
+
     private int mDeferredRotationPauseCount;
 
     /**
@@ -905,7 +913,8 @@ public class DisplayRotation {
     }
 
     void setRotationAtAngleIfAllowed(int rotation, String caller) {
-        if (!isRotationChoiceAllowed(rotation)) return;
+        // Like the ZUI framework: no rotation suggestion while the pen ink mode is open.
+        if (!isRotationChoiceAllowed(rotation) || mInkModeOpen) return;
         freezeRotation(rotation, caller);
     }
 
@@ -1138,6 +1147,11 @@ public class DisplayRotation {
                 Surface.rotationToString(mUserRotation), mUserRotation,
                 mUserRotationMode == WindowManagerPolicy.USER_ROTATION_LOCKED
                         ? "USER_ROTATION_LOCKED" : "");
+
+        if (mStylusDrawnAndScreenLocked && lastRotation >= Surface.ROTATION_0
+                && lastRotation <= Surface.ROTATION_270) {
+            return lastRotation;
+        }
 
         if (isFixedToUserRotation()) {
             return mUserRotation;
@@ -1517,6 +1531,14 @@ public class DisplayRotation {
     private boolean updateSettings() {
         final ContentResolver resolver = mContext.getContentResolver();
         boolean shouldUpdateRotation = false;
+
+        mInkModeOpen = Settings.Global.getInt(resolver, "pen_ink_mode", 0) == 1;
+        final boolean drawnAndLocked =
+                Settings.Global.getInt(resolver, "stylus_drawn_and_screenlock", 0) == 1;
+        if (drawnAndLocked != mStylusDrawnAndScreenLocked) {
+            mStylusDrawnAndScreenLocked = drawnAndLocked;
+            shouldUpdateRotation = true;
+        }
 
         synchronized (mLock) {
             boolean shouldUpdateOrientationListener = false;
@@ -2172,6 +2194,10 @@ public class DisplayRotation {
             resolver.registerContentObserver(
                     Settings.Secure.getUriFor(Settings.Secure.CAMERA_AUTOROTATE), false, this,
                     UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.Global.getUriFor("pen_ink_mode"), false,
+                    this, UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.Global.getUriFor("stylus_drawn_and_screenlock"),
+                    false, this, UserHandle.USER_ALL);
 
             updateSettings();
         }
