@@ -408,6 +408,7 @@ public:
     std::optional<vec2> getMouseCursorPositionInPhysicalDisplay(ui::LogicalDisplayId displayId);
     std::optional<vec2> getMouseCursorPositionInLogicalDisplay(ui::LogicalDisplayId displayId);
     void setStylusPointerIconEnabled(bool enabled);
+    void setLenovoPenHoverIconEnabled(bool enabled);
     void setInputMethodConnectionIsActive(bool isActive);
     void setKeyRemapping(const std::unordered_map<int32_t, int32_t>& keyRemapping);
     void setKeyRemappingForDevice(int32_t deviceId,
@@ -643,7 +644,13 @@ private:
     bool isDisplayInteractive(ui::LogicalDisplayId displayId);
 
     static inline JNIEnv* jniEnv() { return AndroidRuntime::getJNIEnv(); }
+
+    // Settings.Global stylus_change_icon == "1:1": hovering stylus without an app icon shows
+    // the Lenovo ring (PointerIcon.TYPE_LENOVO_PEN_HOVER) instead of nothing.
+    std::atomic<bool> mLenovoPenHoverIcon{false};
 };
+
+constexpr PointerIconStyle TYPE_LENOVO_PEN_HOVER = static_cast<PointerIconStyle>(10001);
 
 NativeInputManager::NativeInputManager(jobject serviceObj, const sp<Looper>& looper,
                                        bool createInteractionProvider)
@@ -2247,7 +2254,8 @@ void NativeInputManager::loadAdditionalMouseResources(
                                                   PointerIconStyle::TYPE_GRAB,
                                                   PointerIconStyle::TYPE_GRABBING,
                                                   PointerIconStyle::TYPE_HANDWRITING,
-                                                  PointerIconStyle::TYPE_SPOT_HOVER};
+                                                  PointerIconStyle::TYPE_SPOT_HOVER,
+                                                  TYPE_LENOVO_PEN_HOVER};
 
     for (const auto pointerIconStyle : ADDITIONAL_STYLES) {
         PointerIcon pointerIcon = loadPointerIcon(env, displayId, pointerIconStyle);
@@ -2279,8 +2287,9 @@ PointerIconStyle NativeInputManager::getDefaultPointerIconId() {
 }
 
 PointerIconStyle NativeInputManager::getDefaultStylusIconId() {
-    // Use the empty icon as the default pointer icon for a hovering stylus.
-    return PointerIconStyle::TYPE_NULL;
+    // Use the empty icon as the default pointer icon for a hovering stylus, unless the Lenovo
+    // stylus ring is on.
+    return mLenovoPenHoverIcon.load() ? TYPE_LENOVO_PEN_HOVER : PointerIconStyle::TYPE_NULL;
 }
 
 PointerIconStyle NativeInputManager::getCustomPointerIconId() {
@@ -2318,6 +2327,10 @@ std::optional<vec2> NativeInputManager::getMouseCursorPositionInPhysicalDisplay(
 std::optional<vec2> NativeInputManager::getMouseCursorPositionInLogicalDisplay(
         ui::LogicalDisplayId displayId) {
     return mInputManager->getChoreographer().getMouseCursorPositionInLogicalDisplay(displayId);
+}
+
+void NativeInputManager::setLenovoPenHoverIconEnabled(bool enabled) {
+    mLenovoPenHoverIcon.store(enabled);
 }
 
 void NativeInputManager::setStylusPointerIconEnabled(bool enabled) {
@@ -3553,6 +3566,12 @@ static jfloatArray nativeGetMouseCursorPositionInLogicalDisplay(JNIEnv* env, job
     return outArr;
 }
 
+static void nativeSetLenovoPenHoverIconEnabled(JNIEnv* env, jobject nativeImplObj,
+                                               jboolean enabled) {
+    NativeInputManager* im = getNativeInputManager(env, nativeImplObj);
+    im->setLenovoPenHoverIconEnabled(enabled);
+}
+
 static void nativeSetStylusPointerIconEnabled(JNIEnv* env, jobject nativeImplObj,
                                               jboolean enabled) {
     NativeInputManager* im = getNativeInputManager(env, nativeImplObj);
@@ -3769,6 +3788,7 @@ static const JNINativeMethod gInputManagerMethods[] = {
         {"getMouseCursorPositionInLogicalDisplay", "(I)[F",
          (void*)nativeGetMouseCursorPositionInLogicalDisplay},
         {"setStylusPointerIconEnabled", "(Z)V", (void*)nativeSetStylusPointerIconEnabled},
+        {"setLenovoPenHoverIconEnabled", "(Z)V", (void*)nativeSetLenovoPenHoverIconEnabled},
         {"setAccessibilityBounceKeysThreshold", "(I)V",
          (void*)nativeSetAccessibilityBounceKeysThreshold},
         {"setAccessibilitySlowKeysThreshold", "(I)V",

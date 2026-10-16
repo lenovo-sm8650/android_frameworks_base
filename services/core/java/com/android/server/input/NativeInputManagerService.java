@@ -298,6 +298,9 @@ interface NativeInputManagerService {
     /** Set whether showing a pointer icon for styluses is enabled. */
     void setStylusPointerIconEnabled(boolean enabled);
 
+    /** Show the Lenovo hover ring for a stylus without an app pointer icon. */
+    void setLenovoPenHoverIconEnabled(boolean enabled);
+
     /** Get the sysfs root path of an input device if known, otherwise return null. */
     @Nullable String getSysfsRootPath(int deviceId);
 
@@ -679,6 +682,9 @@ interface NativeInputManagerService {
 
         @Override
         public native void setStylusPointerIconEnabled(boolean enabled);
+
+        @Override
+        public native void setLenovoPenHoverIconEnabled(boolean enabled);
 
         @Override
         public native String getSysfsRootPath(int deviceId);

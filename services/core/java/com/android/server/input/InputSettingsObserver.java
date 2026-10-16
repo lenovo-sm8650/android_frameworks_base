@@ -42,6 +42,10 @@ import java.util.function.Consumer;
 
 /** Observes settings changes and propagates them to the native side. */
 class InputSettingsObserver extends ContentObserver {
+    private static final String STYLUS_CHANGE_ICON = "stylus_change_icon";
+    private static final String STYLUS_CHANGE_ICON_DEFAULT = "1:0";
+    private static final String STYLUS_CHANGE_ICON_RING = "1:1";
+
     static final String TAG = "InputManager";
 
     /** Feature flag name for the deep press feature */
@@ -125,6 +129,8 @@ class InputSettingsObserver extends ContentObserver {
                         (reason) -> updateAccessibilityStickyKeys()),
                 Map.entry(Settings.Secure.getUriFor(Settings.Secure.STYLUS_POINTER_ICON_ENABLED),
                         (reason) -> updateStylusPointerIconEnabled()),
+                Map.entry(Settings.Global.getUriFor(STYLUS_CHANGE_ICON),
+                        (reason) -> updateLenovoPenHoverIcon()),
                 Map.entry(Settings.System.getUriFor(Settings.System.POINTER_FILL_STYLE),
                         (reason) -> updatePointerFillStyleFromSettings()),
                 Map.entry(Settings.System.getUriFor(Settings.System.POINTER_STROKE_STYLE),
@@ -344,6 +350,21 @@ class InputSettingsObserver extends ContentObserver {
             Log.i(TAG, "Setting user activity interval (ms) of " + intervalMillis);
             mNative.setMinTimeBetweenUserActivityPokes(intervalMillis);
         }
+    }
+
+    /**
+     * Settings.Global stylus_change_icon of the Lenovo pen settings: "1:1" shows the hover ring
+     * for a stylus whose app sets no pointer icon, "1:0" (the stock default, written when the
+     * value is empty) shows nothing.
+     */
+    private void updateLenovoPenHoverIcon() {
+        String value = Settings.Global.getString(mContext.getContentResolver(), STYLUS_CHANGE_ICON);
+        if (value == null || value.isEmpty()) {
+            Settings.Global.putString(mContext.getContentResolver(), STYLUS_CHANGE_ICON,
+                    STYLUS_CHANGE_ICON_DEFAULT);
+            value = STYLUS_CHANGE_ICON_DEFAULT;
+        }
+        mNative.setLenovoPenHoverIconEnabled(STYLUS_CHANGE_ICON_RING.equals(value));
     }
 
     private void updateStylusPointerIconEnabled() {

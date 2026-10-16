@@ -159,6 +159,14 @@ public final class PointerIcon implements Parcelable {
     private static final int TYPE_OEM_FIRST = 10000;
 
     /**
+     * Ring shown for a hovering stylus when the app sets no icon and the Lenovo stylus pointer
+     * is on (Settings.Global stylus_change_icon "1:1"). Ported from the ZUI framework-res
+     * pointer_lenovo_pen_hover_vector.
+     * @hide
+     */
+    public static final int TYPE_LENOVO_PEN_HOVER = TYPE_OEM_FIRST + 1;
+
+    /**
      * The default pointer icon.
      * @deprecated This is the same as using {@link #TYPE_ARROW}. Use {@link #TYPE_ARROW} to
      *     explicitly show an arrow, or use a {@code null} {@link PointerIcon} with
@@ -666,6 +674,8 @@ public final class PointerIcon implements Parcelable {
                 return com.android.internal.R.styleable.Pointer_pointerIconGrabbing;
             case TYPE_HANDWRITING:
                 return com.android.internal.R.styleable.Pointer_pointerIconHandwriting;
+            case TYPE_LENOVO_PEN_HOVER:
+                return com.android.internal.R.styleable.Pointer_pointerIconLenovoPenHover;
             default:
                 return -1;
         }
@@ -705,6 +715,7 @@ public final class PointerIcon implements Parcelable {
             case TYPE_GRAB: return "GRAB";
             case TYPE_GRABBING: return "GRABBING";
             case TYPE_HANDWRITING: return "HANDWRITING";
+            case TYPE_LENOVO_PEN_HOVER: return "LENOVO_PEN_HOVER";
             default: return Integer.toString(type);
         }
     }
