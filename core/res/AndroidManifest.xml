@@ -10628,6 +10628,23 @@
     <protected-broadcast android:name="lineageos.platform.intent.action.UPDATE_TWILIGHT_STATE" />
     <protected-broadcast android:name="lineageos.intent.action.INITIALIZE_LIVEDISPLAY" />
 
+    <!-- Lenovo pen state broadcasts sent by the system server (hardware/lenovo/input),
+         protected like in the stock ZUI framework -->
+    <protected-broadcast android:name="lenovo.intent.action.PEN_ATTACHED_MISALIGNED" />
+    <protected-broadcast android:name="lenovo.intent.action.PEN_ATTACH_CHANGED" />
+    <protected-broadcast android:name="lenovo.intent.action.PEN_BATTERY_CHANGED" />
+    <protected-broadcast android:name="lenovo.intent.action.PEN_BT_CHANGED" />
+    <protected-broadcast android:name="lenovo.intent.action.PEN_CANCEL_CONNECTING" />
+    <protected-broadcast android:name="lenovo.intent.action.PEN_CONNECTING" />
+    <protected-broadcast android:name="lenovo.intent.action.PEN_FIRST_PAIR" />
+    <protected-broadcast android:name="lenovo.intent.action.PEN_LINK_RECONNECT" />
+    <protected-broadcast android:name="lenovo.intent.action.PEN_LINK_TOUCHED" />
+    <protected-broadcast android:name="lenovo.intent.action.PEN_LOST_INDICATION" />
+    <protected-broadcast android:name="lenovo.intent.action.PEN_LOW_BATTERY" />
+    <protected-broadcast android:name="lenovo.intent.action.PEN_NEED_OPENBT" />
+    <protected-broadcast android:name="lenovo.intent.action.PEN_SN" />
+    <protected-broadcast android:name="lenovo.intent.action.PEN_VERSION" />
+
     <!-- @hide -->
     <permission android:name="lineageos.permission.HARDWARE_ABSTRACTION_ACCESS"
                 android:protectionLevel="signature|privileged" />
