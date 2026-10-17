@@ -33,6 +33,8 @@ import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
 
+import dalvik.system.PathClassLoader;
+
 import com.android.internal.R;
 import com.android.internal.util.custom.KeyProviderManager;
 
@@ -146,7 +148,7 @@ public class PropImitationHooks {
         OFFSET_FIELD = offsetField;
     }
 
-    // Device identity shown to selected apps, from Custom Tweaks:
+    // Device identity shown to selected apps, from Experimental features:
     // Settings.Global lenovo_device_spoof_apps = "pkg=brand|manufacturer|model;...".
     // While the key is unset, config_deviceSpoofApps applies (same
     // entries; a bare package name uses config_deviceSpoof{Brand,
@@ -193,6 +195,40 @@ public class PropImitationHooks {
         return false;
     }
 
+    // Optional external Play Integrity Fix module (a separate GPL package, not part of
+    // this file). Unless Settings.Global lenovo_pif_module is explicitly 0 (unset means on)
+    // and while the module's jar is installed, the jar's entry point,
+    // static boolean init(Context, String processName), is
+    // loaded into Google Play services (DroidGuard) and the Play Store and does the
+    // spoofing instead of setPlayIntegrityProps(). Without the jar, with the setting at 0,
+    // or while init() returns false (no profile fetched yet), nothing changes.
+    private static final String PIF_MODULE_SETTING = "lenovo_pif_module";
+    private static final String PIF_MODULE_JAR =
+            "/system_ext/framework/PlayIntegrityFixEntry.jar";
+    private static final String PIF_MODULE_CLASS = "es.chiteroman.playintegrityfix.RomEntry";
+    private static volatile boolean sPifModuleActive;
+
+    /** Hands the process to the module; false if it is off, absent or fails to load. */
+    private static boolean loadPifModule(Context context, String processName) {
+        try {
+            if (Settings.Global.getInt(context.getContentResolver(), PIF_MODULE_SETTING, 1) == 0
+                    || !new File(PIF_MODULE_JAR).exists()) {
+                return false;
+            }
+            final Class<?> entry = new PathClassLoader(PIF_MODULE_JAR,
+                    ClassLoader.getSystemClassLoader()).loadClass(PIF_MODULE_CLASS);
+            if (!Boolean.TRUE.equals(entry.getMethod("init", Context.class, String.class)
+                    .invoke(null, context, processName))) {
+                return false;
+            }
+            sPifModuleActive = true;
+            return true;
+        } catch (Throwable t) {
+            Log.e(TAG, "Failed to load the Play Integrity Fix module", t);
+            return false;
+        }
+    }
+
     public static void setProps(Context context) {
         final String packageName = context.getPackageName();
         final String processName = Application.getProcessName();
@@ -216,7 +252,7 @@ public class PropImitationHooks {
         sIsFinsky = packageName.equals(PACKAGE_FINSKY);
         sIsPhotos = packageName.equals(PACKAGE_GPHOTOS);
 
-        // The selected apps of Custom Tweaks see another device instead of
+        // The selected apps of Experimental features see another device instead of
         // the other spoofs below. Play services and the Play Store never do.
         if (!sIsGms && !sIsFinsky && !packageName.equals(PACKAGE_GMS)
                 && setDeviceSpoofProps(context, res, packageName)) {
@@ -230,7 +266,9 @@ public class PropImitationHooks {
          */
         if (sIsGms || sIsFinsky) {
             if (!android.os.Process.isIsolated()) {
-                setPlayIntegrityProps(context);
+                if (!loadPifModule(context, processName)) {
+                    setPlayIntegrityProps(context);
+                }
             } else {
                 dlog("Not setting Play Integrity props in isolated process");
             }
@@ -409,6 +447,10 @@ public class PropImitationHooks {
     }
 
     public static void onEngineGetCertificateChain() {
+        if (sPifModuleActive) {
+            dlog("Key attestation is handled by the Play Integrity Fix module");
+            return;
+        }
         if (sDisableKeyAttestationBlock) {
             dlog("Key attestation blocking is disabled by user");
             return;
