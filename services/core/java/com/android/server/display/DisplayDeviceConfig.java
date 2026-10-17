@@ -2078,11 +2078,53 @@ public class DisplayDeviceConfig {
         loadBrightnessChangeThresholdsFromXml();
         loadAutoBrightnessConfigsFromConfigXml();
         loadAutoBrightnessAvailableFromConfigXml();
+        if (ZuiDisplayHooks.isAutoBrightness()) {
+            loadAutoBrightnessBrighteningLightDebounce(null);
+            loadAutoBrightnessDarkeningLightDebounce(null);
+        }
         loadRefreshRateSetting(null);
         loadBrightnessCapForWearBedtimeModeFromConfigXml();
         loadIdleScreenRefreshRateTimeoutConfigs(null);
         loadDozeBrightness(null);
+        if (ZuiDisplayHooks.isAutoBrightness()) {
+            zuiLoadHighBrightnessModeData();
+        }
         mLoadedFrom = "<config.xml>";
+    }
+
+    /**
+     * Stock ZUI: the high brightness mode data of the global configuration is in
+     * /system/etc/displayconfig/display_hdr.xml.
+     */
+    private void zuiLoadHighBrightnessModeData() {
+        final File file = Environment.buildPath(Environment.getRootDirectory(), ETC_DIR,
+                DISPLAY_CONFIG_DIR, "display_hdr.xml");
+        if (!file.isFile()) {
+            Slog.e(TAG, "Display configuration is not a file: " + file + ", skipping");
+            return;
+        }
+        try (InputStream in = new BufferedInputStream(new FileInputStream(file))) {
+            final DisplayConfiguration config = XmlParser.read(in);
+            if (config == null) {
+                Slog.w(TAG, "DisplayDeviceConfig file is null");
+                return;
+            }
+            Function<HighBrightnessMode, Float> transitionPointProvider = (hbm) -> {
+                float transitionPointBacklightScale = hbm.getTransitionPoint_all().floatValue();
+                if (transitionPointBacklightScale > mBacklightMaximum) {
+                    throw new IllegalArgumentException("HBM transition point invalid. "
+                            + transitionPointBacklightScale + " is not less than "
+                            + mBacklightMaximum);
+                }
+                return getBrightnessFromBacklight(transitionPointBacklightScale);
+            };
+            mHbmData = HighBrightnessModeData.loadHighBrightnessModeData(config,
+                    transitionPointProvider);
+            mHdrBrightnessData = HdrBrightnessData.loadConfig(config, transitionPointProvider);
+        } catch (IOException | DatatypeConfigurationException | XmlPullParserException e) {
+            Slog.e(TAG, "Encountered an error while reading/parsing display config file: "
+                    + file, e);
+        }
     }
 
     private void initFromDefaultValues() {
@@ -2203,8 +2245,9 @@ public class DisplayDeviceConfig {
 
     private void loadBrightnessMap(DisplayConfiguration config) {
         final NitsMap map = config.getScreenBrightnessMap();
-        // Map may not exist in display device config
-        if (map == null) {
+        // Map may not exist in display device config. The stock ZUI framework never uses it
+        // (ZuiAutoBrightness): the nits and backlight arrays of config.xml always rule.
+        if (map == null || ZuiDisplayHooks.isAutoBrightness()) {
             loadBrightnessMapFromConfigXml();
             return;
         }

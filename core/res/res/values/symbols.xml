@@ -6632,4 +6632,9 @@
   <java-symbol type="integer" name="config_stylusDetectScanCode" />
   <java-symbol type="array" name="config_stylusIncompatibleRefreshRates" />
   <java-symbol type="integer" name="config_stylusRefreshRateTimeoutMs" />
+    <!-- Stock Lenovo ZUI framework brightness -->
+  <java-symbol type="bool" name="config_zuiAutoBrightness" />
+  <java-symbol type="array" name="config_zui_defaultBrightnessThreshold" />
+  <java-symbol type="integer" name="config_zui_enterHbmTemperature" />
+  <java-symbol type="integer" name="config_zui_exitHbmTemperature" />
   </resources>

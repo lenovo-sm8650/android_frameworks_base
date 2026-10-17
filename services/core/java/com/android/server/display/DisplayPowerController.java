@@ -362,6 +362,16 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
     private float mBrightnessRampRateFastIncrease;
     private float mBrightnessRampRateSlowDecrease;
     private float mBrightnessRampRateSlowIncrease;
+
+    // ZUI (stock DisplayPowerController, "ZuiAutoBrightness")
+    private static final int MSG_ZUI_END_FAST_CHANGE = 104;
+    private boolean mZuiAutoBrightness;
+    private float mZuiBrightnessMinimum;
+    // true for two seconds after the switch to automatic brightness: no slow ramps
+    private boolean mEnabledFastChangeForBrightness;
+    private float mAutoBrightnessAdjustmentFloat;
+    // the last reasons of the brightness, to find the changes the window manager overrides
+    private final java.util.ArrayDeque<Integer> mZuiStrategyQueue = new java.util.ArrayDeque<>(3);
     private float mBrightnessRampRateSlowDecreaseIdle;
     private float mBrightnessRampRateSlowIncreaseIdle;
 
@@ -1165,6 +1175,12 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
     }
 
     private void loadBrightnessRampRates() {
+        mZuiAutoBrightness = ZuiDisplayHooks.isAutoBrightness();
+        if (mZuiAutoBrightness) {
+            mZuiBrightnessMinimum = BrightnessUtils.clampAbsoluteBrightness(
+                    mContext.getSystemService(PowerManager.class).getBrightnessConstraint(
+                            PowerManager.BRIGHTNESS_CONSTRAINT_TYPE_MINIMUM));
+        }
         mBrightnessRampRateFastDecrease = mDisplayDeviceConfig.getBrightnessRampFastDecrease();
         mBrightnessRampRateFastIncrease = mDisplayDeviceConfig.getBrightnessRampFastIncrease();
         mBrightnessRampRateSlowDecrease = mDisplayDeviceConfig.getBrightnessRampSlowDecrease();
@@ -1408,8 +1424,33 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
         boolean updateScreenBrightnessSetting =
                 displayBrightnessState.shouldUpdateScreenBrightnessSetting();
 
+        if (mZuiAutoBrightness && mEnabledFastChangeForBrightness) {
+            slowChange = false;
+        }
         if (!Float.isNaN(brightnessState)) {
-            brightnessState = clampScreenBrightness(brightnessState);
+            if (mZuiAutoBrightness) {
+                // ZUI: the brightness that follows the last manual one within the deviation of
+                // the slider is the manual one, after an adjustment of the automatic brightness.
+                final boolean noAdjustment = Float.compare(mAutoBrightnessAdjustmentFloat, 0.0f)
+                        == 0;
+                final boolean noAutoAdjustment = mAutomaticBrightnessController == null
+                        || Float.compare(mAutomaticBrightnessController
+                                .getAutomaticScreenBrightnessAdjustment(), 0.0f) == 0;
+                final float lastUserSetBrightness =
+                        mDisplayBrightnessController.getLastUserSetScreenBrightness();
+                if ((!noAdjustment || !noAutoAdjustment)
+                        && mBrightnessReasonTemp.getReason() == BrightnessReason.REASON_AUTOMATIC
+                        && !Float.isNaN(lastUserSetBrightness)
+                        && Math.abs(brightnessState - lastUserSetBrightness)
+                                <= ZuiDisplayHooks.SCREEN_BRIGHTNESS_DEVIATION) {
+                    slowChange = false;
+                    brightnessState = lastUserSetBrightness;
+                } else {
+                    brightnessState = clampScreenBrightness(brightnessState);
+                }
+            } else {
+                brightnessState = clampScreenBrightness(brightnessState);
+            }
         }
 
         float ambientLux = mAutomaticBrightnessController == null ? 0
@@ -1433,6 +1474,9 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
                 displayBrightnessState, mPowerRequest,
                 brightnessState, slowChange, /* displayState= */ state);
         brightnessState = clampedState.getBrightness();
+        if (mZuiAutoBrightness) {
+            ZuiDisplayHooks.setBrightness(brightnessState);
+        }
         slowChange = clampedState.isSlowChange();
         // faster rate wins, at this point customAnimationRate == -1, strategy does not control
         // customAnimationRate. Should be revisited if strategy start setting this value
@@ -1536,6 +1580,14 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
                 mBrightnessReasonTemp.addModifier(BrightnessReason.MODIFIER_HDR);
             }
 
+            if (mZuiAutoBrightness) {
+                // ZUI: the backlight (and the SDR level) gets twice the nits of the brightness,
+                // up to the maximum of the panel (stock getHdrBrightnessFromSdr(brightness, 2.0f)).
+                sdrAnimateValue = mDisplayDeviceConfig.getHdrBrightnessFromSdr(hdrBrightness,
+                        ZuiDisplayHooks.BACKLIGHT_NITS_RATIO);
+                animateValue = sdrAnimateValue;
+            }
+
             // if doze or suspend state is requested, we want to finish brightnes animation fast
             // to allow state animation to start
             if (mPowerRequest.policy == POLICY_DOZE
@@ -1573,6 +1625,11 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
                             customAnimationRate, /* ignoreAnimationLimits = */true);
                 } else {
                     boolean isIncreasing = animateValue > currentBrightness;
+                    if (mZuiAutoBrightness
+                            && mBrightnessReasonTemp.getReason() != BrightnessReason.REASON_OVERRIDE
+                            && isZuiOverrideChange()) {
+                        slowChange = true;
+                    }
                     final boolean idle = mAutomaticBrightnessController != null
                             && mAutomaticBrightnessController.isInIdleMode();
                     if (isIncreasing && slowChange) {
@@ -1585,6 +1642,20 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
                                 : mBrightnessRampRateSlowDecrease;
                     } else {
                         rampSpeed = mBrightnessRampRateFastDecrease;
+                    }
+                    if (mZuiAutoBrightness) {
+                        if (slowChange) {
+                            rampSpeed = useLenovoBrightnessRampRate(isIncreasing);
+                        } else {
+                            if (mEnabledFastChangeForBrightness) {
+                                mHandler.sendEmptyMessageDelayed(MSG_ZUI_END_FAST_CHANGE, 2000);
+                            }
+                            if (mFlags.isFastHdrTransitionsEnabled() && isHdrOnlyChange
+                                    && (mBrightnessReasonTemp.getModifier()
+                                            & BrightnessReason.MODIFIER_HDR) == 0) {
+                                rampSpeed = useLenovoBrightnessRampRate(false);
+                            }
+                        }
                     }
                     animateScreenBrightness(animateValue, sdrAnimateValue, rampSpeed);
                 }
@@ -1613,6 +1684,12 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
                     + mBrightnessReasonTemp.toString(brightnessAdjustmentFlags)
                     + "', previous reason: '" + mBrightnessReason + "'.");
             mBrightnessReason.set(mBrightnessReasonTemp);
+            if (mZuiAutoBrightness && !"NotificationShade".equals(mBrightnessReasonTemp.getTag())) {
+                if (mZuiStrategyQueue.size() >= 3) {
+                    mZuiStrategyQueue.poll();
+                }
+                mZuiStrategyQueue.add(mBrightnessReasonTemp.getReason());
+            }
         } else if (mBrightnessReasonTemp.getReason() == BrightnessReason.REASON_MANUAL
                 && userSetBrightnessChanged) {
             Slog.v(mTag, "Brightness [" + brightnessState + "] manual adjustment.");
@@ -2160,10 +2237,40 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
 
     private float clampScreenBrightness(float value) {
         if (Float.isNaN(value)) {
-            value = PowerManager.BRIGHTNESS_MIN;
+            value = mZuiAutoBrightness ? mZuiBrightnessMinimum : PowerManager.BRIGHTNESS_MIN;
         }
-        return MathUtils.constrain(value, mBrightnessRangeController.getCurrentBrightnessMin(),
+        // ZUI: the lowest brightness is the one of the settings
+        // (config_screenBrightnessSettingMinimumFloat)
+        return MathUtils.constrain(value,
+                mZuiAutoBrightness ? mZuiBrightnessMinimum
+                        : mBrightnessRangeController.getCurrentBrightnessMin(),
                 mBrightnessRangeController.getCurrentBrightnessMax());
+    }
+
+    /** Stock useLenovoBrightnessRampRate: a full sweep in 5 s up and 33 s down. */
+    private float useLenovoBrightnessRampRate(boolean increasing) {
+        final int max = mContext.getResources().getInteger(
+                com.android.internal.R.integer.config_screenBrightnessSettingMaximum);
+        final int min = mContext.getResources().getInteger(
+                com.android.internal.R.integer.config_screenBrightnessSettingMinimum);
+        return ((max - min) / 255.0f) / (increasing ? ZuiDisplayHooks.RAMP_SECONDS_INCREASING
+                : ZuiDisplayHooks.RAMP_SECONDS_DECREASING);
+    }
+
+    /** Stock isOverrideChange: the last reasons are only manual, automatic and override. */
+    private boolean isZuiOverrideChange() {
+        if (mZuiStrategyQueue.size() != 3
+                || !mZuiStrategyQueue.contains(BrightnessReason.REASON_OVERRIDE)) {
+            return false;
+        }
+        for (Integer reason : mZuiStrategyQueue) {
+            if (reason != BrightnessReason.REASON_MANUAL
+                    && reason != BrightnessReason.REASON_AUTOMATIC
+                    && reason != BrightnessReason.REASON_OVERRIDE) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void animateScreenBrightness(float target, float sdrTarget, float rate) {
@@ -2363,6 +2470,10 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
         mAutomaticBrightnessStrategy.updatePendingAutoBrightnessAdjustments();
         mAutomaticBrightnessStrategy.setAutoBrightnessOneShotEnabled(
                 getAutoBrightnessOneShotSetting());
+        if (mZuiAutoBrightness) {
+            mAutoBrightnessAdjustmentFloat = Settings.System.getFloat(mContext.getContentResolver(),
+                    Settings.System.SCREEN_AUTO_BRIGHTNESS_ADJ, 0.0f);
+        }
         sendUpdatePowerState();
     }
 
@@ -2371,13 +2482,21 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
                 mContext.getContentResolver(),
                 Settings.System.SCREEN_BRIGHTNESS_MODE,
                 Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL, UserHandle.USER_CURRENT);
+        if (mZuiAutoBrightness) {
+            mEnabledFastChangeForBrightness = screenBrightnessModeSetting
+                    == Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC;
+        }
         mAutomaticBrightnessStrategy.setUseAutoBrightness(screenBrightnessModeSetting
                 == Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC);
 
         if (screenBrightnessModeSetting == Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL) {
             // In manual mode, all brightness changes should be saved immediately.
             mDisplayBrightnessController.saveBrightnessIfNeeded();
+            if (mZuiAutoBrightness && mAutomaticBrightnessController != null) {
+                mAutomaticBrightnessController.resetShortTermModel();
+            }
         }
+        mZuiStrategyQueue.clear();
     }
 
     /**
@@ -2898,6 +3017,10 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
                     mAutomaticBrightnessStrategy
                             .setTemporaryAutoBrightnessAdjustment(Float.intBitsToFloat(msg.arg1));
                     updatePowerState();
+                    break;
+
+                case MSG_ZUI_END_FAST_CHANGE:
+                    mEnabledFastChangeForBrightness = false;
                     break;
 
                 case MSG_SET_WINDOW_MANAGER_BRIGHTNESS_OVERRIDE:

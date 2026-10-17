@@ -8093,4 +8093,24 @@
     <!-- Time after the last stylus detection before the display may return to the refresh
          rates of config_stylusIncompatibleRefreshRates. -->
     <integer name="config_stylusRefreshRateTimeoutMs">10000</integer>
+
+    <!-- Stock Lenovo ZUI framework brightness ("ZuiAutoBrightness" feature). When true, the
+         automatic brightness of the display service follows the stock ZUI logic: the
+         brightness points of config.xml rule the nits to backlight mapping, the automatic
+         brightness is moved up to the next brightness point, the backlight has twice the
+         nits of the brightness (up to the maximum), the ramps of the automatic changes are the
+         stock ones, ... See com.android.server.display.ZuiDisplayHooks. -->
+    <bool name="config_zuiAutoBrightness">false</bool>
+
+    <!-- Stock ZUI: ambient lux thresholds of the high brightness mode of the panel (the
+         "sunlight" mode of Settings > Display): the first step from the first value, the
+         second step from the second one (optional). -->
+    <integer-array name="config_zui_defaultBrightnessThreshold">
+        <item>5000</item>
+    </integer-array>
+
+    <!-- Stock ZUI: temperatures (tenth of a degree) to enter and to leave the high brightness
+         mode of the panel. 0: no limit. -->
+    <integer name="config_zui_enterHbmTemperature">0</integer>
+    <integer name="config_zui_exitHbmTemperature">0</integer>
 </resources>
