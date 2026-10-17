@@ -3,7 +3,7 @@
      SPDX-FileCopyrightText: 2026 The LineageOS Project
      SPDX-License-Identifier: Apache-2.0
 -->
-<!-- Marker for the TB520FU Lenovo keyboard manager framework patch. The
+<!-- Marker for the Lenovo keyboard manager framework patch. The
      resource exists only while that patch is applied, so LenovoParts can show
      the keyboard firmware settings only on builds that have it. -->
 <resources>

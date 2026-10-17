@@ -222,7 +222,7 @@ final class InstallPackageHelper {
     private static final long WAKELOCK_TIMEOUT_MS = WATCHDOG_TIMEOUT + 1000 * 60;
     private static final String INSTALLER_WAKE_LOCK_TAG = "installer:packages";
 
-    // TB520FU: packages the Play Store may not install or update.
+    // Lenovo: packages the Play Store may not install or update.
     private static final String PLAY_STORE_PACKAGE = "com.android.vending";
     private static final Set<String> PLAY_BLOCKED_PACKAGES =
             Set.of("com.google.android.GoogleCamera");
@@ -1733,7 +1733,7 @@ final class InstallPackageHelper {
 
         String pkgName = parsedPackage.getPackageName();
         request.setName(pkgName);
-        // TB520FU: the Play Store must not install or update Google Camera.
+        // Lenovo: the Play Store must not install or update Google Camera.
         // With the certified build fingerprint it offers Pixel Camera, which
         // does not run here, and it would replace a Google Camera port shipped
         // with the ROM. Other install sources (adb, file managers) still work.

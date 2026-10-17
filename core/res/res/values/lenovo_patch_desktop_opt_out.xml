@@ -3,7 +3,7 @@
      SPDX-FileCopyrightText: 2026 The LineageOS Project
      SPDX-License-Identifier: Apache-2.0
 -->
-<!-- Marker for the TB520FU keyboard desktop first opt out framework patch.
+<!-- Marker for the Lenovo keyboard desktop first opt out framework patch.
      The resource exists only while that patch is applied, so LenovoParts can
      show the keyboard desktop mode settings only on builds that have it. -->
 <resources>

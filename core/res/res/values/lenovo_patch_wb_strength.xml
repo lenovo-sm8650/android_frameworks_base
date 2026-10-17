@@ -3,7 +3,7 @@
      SPDX-FileCopyrightText: 2026 The LineageOS Project
      SPDX-License-Identifier: Apache-2.0
 -->
-<!-- Marker for the TB520FU display white balance strength framework patch.
+<!-- Marker for the Lenovo display white balance strength framework patch.
      The resource exists only while that patch is applied, so LenovoParts can
      show the white balance strength slider only on builds that have it. -->
 <resources>

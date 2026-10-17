@@ -405,7 +405,7 @@ public final class SystemServiceRegistry {
                 return new CaptioningManager(ctx);
             }});
 
-        // Lenovo pen haptics, served by the device's DeviceKeyHandler (TB520FU)
+        // Lenovo pen haptics, served by the device's DeviceKeyHandler
         registerService(ZuiPenHapticManager.SERVICE, ZuiPenHapticManager.class,
                 new CachedServiceFetcher<ZuiPenHapticManager>() {
             @Override
@@ -423,7 +423,7 @@ public final class SystemServiceRegistry {
             }});
 
         // Lenovo keyboard firmware updater access, served by the device's
-        // DeviceKeyHandler (TB520FU)
+        // DeviceKeyHandler
         registerService(LenovoKeyboardManager.SERVICE, LenovoKeyboardManager.class,
                 new CachedServiceFetcher<LenovoKeyboardManager>() {
             @Override
