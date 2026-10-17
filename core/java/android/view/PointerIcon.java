@@ -675,7 +675,7 @@ public final class PointerIcon implements Parcelable {
             case TYPE_HANDWRITING:
                 return com.android.internal.R.styleable.Pointer_pointerIconHandwriting;
             case TYPE_LENOVO_PEN_HOVER:
-                return com.android.internal.R.styleable.Pointer_pointerIconLenovoPenHover;
+                return com.android.internal.R.styleable.Pointer_zuiPointerIconPenHover;
             default:
                 return -1;
         }
