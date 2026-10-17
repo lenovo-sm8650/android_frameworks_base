@@ -45,6 +45,9 @@ class FlashlightDialogDelegate @Inject constructor(
 
     private lateinit var slider: Slider
 
+    private val minSliderLevel =
+        if (context.resources.getBoolean(R.bool.config_flashlightStrengthTwoStep)) 0 else 1
+
     private val vibrator = context.getSystemService(Vibrator::class.java)
     private val flashlightMoveHaptic: VibrationEffect =
         VibrationEffect.get(VibrationEffect.EFFECT_TICK)
@@ -94,11 +97,12 @@ class FlashlightDialogDelegate @Inject constructor(
         val currentPercent = flashlightController.getCurrentPercent()
 
         slider.isEnabled = flashlightController.isEnabled()
-        slider.valueFrom = 1f
+        slider.valueFrom = minSliderLevel.toFloat()
         slider.valueTo = numLevels.toFloat()
         slider.stepSize = 1f
         slider.setTickVisible(numLevels <= 10)
-        slider.value = ((currentPercent * numLevels).roundToInt()).coerceIn(1, numLevels).toFloat()
+        slider.value = ((currentPercent * numLevels).roundToInt())
+            .coerceIn(minSliderLevel, numLevels).toFloat()
         slider.setLabelFormatter { value ->
             ((value / numLevels) * 100).roundToInt().coerceIn(0, 100).toString() + "%" }
 
@@ -141,7 +145,7 @@ class FlashlightDialogDelegate @Inject constructor(
     @MainThread
     private fun updateFlashlightStrength(level: Int, maxLevel: Int) {
         flashlightController.setFlashlightStrengthLevel(
-            level.coerceIn(1, maxLevel.coerceAtLeast(1))
+            level.coerceIn(minSliderLevel, maxLevel.coerceAtLeast(1))
         )
     }
 }

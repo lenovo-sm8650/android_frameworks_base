@@ -16,8 +16,10 @@
 
 package com.android.systemui.flashlight.data.repository
 
+import android.content.mockedContext
 import android.content.packageManager
 import android.content.pm.PackageManager
+import android.content.res.Resources
 import com.android.systemui.camera.cameraManager
 import com.android.systemui.dump.dumpManager
 import com.android.systemui.flashlight.shared.logger.flashlightLogger
@@ -27,10 +29,12 @@ import com.android.systemui.kosmos.testDispatcher
 import com.android.systemui.shared.settings.data.repository.secureSettingsRepository
 import com.android.systemui.user.data.repository.userRepository
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 
 val Kosmos.flashlightRepository: FlashlightRepositoryImpl by
     Kosmos.Fixture {
+        whenever(mockedContext.resources).thenReturn(mock<Resources>())
         FlashlightRepositoryImpl(
             backgroundScope,
             testDispatcher,
@@ -40,6 +44,7 @@ val Kosmos.flashlightRepository: FlashlightRepositoryImpl by
             packageManager,
             flashlightLogger,
             userRepository,
+            mockedContext,
         )
     }
 

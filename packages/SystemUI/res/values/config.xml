@@ -52,6 +52,11 @@
 
     <bool name="config_dead_zone_flash">false</bool>
 
+    <!-- Limits the flashlight strength to three positions: off, medium (level 1, torch strength
+         level 1) and maximum (level 2, the full-current torch set with setTorchMode). Enabled by
+         device overlays whose camera HAL strength levels do not give distinct light. -->
+    <bool name="config_flashlightStrengthTwoStep">false</bool>
+
     <!-- Whether to enable dimming navigation buttons when wallpaper is not visible, should be
          enabled for OLED devices to reduce/prevent burn in on the navigation bar (because of the
          black background and static button placements) and disabled for all other devices to

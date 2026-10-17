@@ -37,6 +37,7 @@ import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.res.R;
 import com.android.systemui.util.settings.SecureSettings;
 
 import java.io.PrintWriter;
@@ -61,6 +62,7 @@ public class FlashlightControllerImpl implements FlashlightController {
     private static final int DISPATCH_CHANGED = 1;
     private static final int DISPATCH_AVAILABILITY_CHANGED = 2;
     private static final int DISPATCH_STRENGTH_CHANGED = 3;
+    private static final int TWO_STEP_MAX_LEVEL = 2;
 
     private static final String ACTION_FLASHLIGHT_CHANGED =
         "com.android.settings.flashlight.action.FLASHLIGHT_CHANGED";
@@ -74,6 +76,7 @@ public class FlashlightControllerImpl implements FlashlightController {
     private final BroadcastSender mBroadcastSender;
 
     private final boolean mHasFlashlight;
+    private final boolean mTwoStepLevels;
 
     @GuardedBy("mListeners")
     private final ArrayList<WeakReference<FlashlightListener>> mListeners = new ArrayList<>(1);
@@ -118,6 +121,7 @@ public class FlashlightControllerImpl implements FlashlightController {
         mBroadcastSender = broadcastSender;
 
         mHasFlashlight = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH);
+        mTwoStepLevels = context.getResources().getBoolean(R.bool.config_flashlightStrengthTwoStep);
         init();
     }
 
@@ -137,8 +141,10 @@ public class FlashlightControllerImpl implements FlashlightController {
                 CameraCharacteristics c = mCameraManager.getCameraCharacteristics(id);
                 Boolean flashAvailable = c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
                 if (flashAvailable != null && flashAvailable) {
-                    mDefaultLevel = c.get(CameraCharacteristics.FLASH_INFO_STRENGTH_DEFAULT_LEVEL);
-                    mMaxLevel = c.get(CameraCharacteristics.FLASH_INFO_STRENGTH_MAXIMUM_LEVEL);
+                    mDefaultLevel = mTwoStepLevels ? TWO_STEP_MAX_LEVEL
+                            : c.get(CameraCharacteristics.FLASH_INFO_STRENGTH_DEFAULT_LEVEL);
+                    mMaxLevel = mTwoStepLevels ? TWO_STEP_MAX_LEVEL
+                            : c.get(CameraCharacteristics.FLASH_INFO_STRENGTH_MAXIMUM_LEVEL);
                     mStrengthControlSupported = (mMaxLevel > 1);
                     mCameraId.set(id);
 
@@ -180,7 +186,7 @@ public class FlashlightControllerImpl implements FlashlightController {
                                 int level = (mCurrentLevel > 0) ? mCurrentLevel : mDefaultLevel;
                                 level = Math.max(1, Math.min(level, mMaxLevel));
                                 if (DEBUG) Log.d(TAG, "Turning on torch with level " + level);
-                                mCameraManager.turnOnTorchWithStrengthLevel(mCameraId.get(), level);
+                                turnOnTorchAtLevel(level, false);
                             } else {
                                 if (DEBUG) Log.d(TAG, "Turning on torch (no strength support)");
                                 mCameraManager.setTorchMode(mCameraId.get(), true);
@@ -196,6 +202,20 @@ public class FlashlightControllerImpl implements FlashlightController {
                 }
             }
         });
+    }
+
+    /**
+     * Applies a level of the UI scheme. In two-step mode the maximum level is the full-current
+     * torch, which only setTorchMode gives; the torch is turned off first when it is on through
+     * the strength path.
+     */
+    private void turnOnTorchAtLevel(int level, boolean wasOn) throws CameraAccessException {
+        if (mTwoStepLevels && level == TWO_STEP_MAX_LEVEL) {
+            if (wasOn) mCameraManager.setTorchMode(mCameraId.get(), false);
+            mCameraManager.setTorchMode(mCameraId.get(), true);
+        } else {
+            mCameraManager.turnOnTorchWithStrengthLevel(mCameraId.get(), level);
+        }
     }
 
     public boolean hasFlashlight() {
@@ -238,6 +258,10 @@ public class FlashlightControllerImpl implements FlashlightController {
             setFlashlight(level > 0);
             return;
         }
+        if (mTwoStepLevels && level <= 0) {
+            setFlashlight(false);
+            return;
+        }
         if (mCameraId.get() == null) {
             mExecutor.execute(this::tryInitCamera);
         }
@@ -248,15 +272,17 @@ public class FlashlightControllerImpl implements FlashlightController {
             if (mCameraId.get() == null) return;
 
             int clampedLevel;
+            boolean wasOn;
             synchronized (this) {
                 clampedLevel = Math.max(1, Math.min(requestedLevel, mMaxLevel));
                 if (mCurrentLevel == clampedLevel) return;
                 mCurrentLevel = clampedLevel;
+                wasOn = mFlashlightEnabled;
             }
 
             try {
                 if (DEBUG) Log.d(TAG, "Setting torch strength level: " + clampedLevel);
-                mCameraManager.turnOnTorchWithStrengthLevel(mCameraId.get(), clampedLevel);
+                turnOnTorchAtLevel(clampedLevel, wasOn);
 
                 dispatchStrengthChanged(clampedLevel);
 

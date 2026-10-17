@@ -16,6 +16,7 @@
 
 package com.android.systemui.flashlight.data.repository
 
+import android.content.Context
 import android.content.pm.PackageManager
 import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCharacteristics
@@ -24,11 +25,13 @@ import android.hardware.camera2.CameraManager.TorchCallback
 import android.provider.Settings
 import com.android.systemui.CoreStartable
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.dagger.qualifiers.Application
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.flashlight.flags.FlashlightStrength
 import com.android.systemui.flashlight.shared.logger.FlashlightLogger
 import com.android.systemui.flashlight.shared.model.FlashlightModel
+import com.android.systemui.res.R
 import com.android.systemui.shared.settings.data.repository.SecureSettingsRepository
 import com.android.systemui.user.data.repository.UserRepository
 import com.android.systemui.util.asIndenting
@@ -91,7 +94,11 @@ constructor(
     private val packageManager: PackageManager,
     private val logger: FlashlightLogger,
     private val userRepo: UserRepository,
+    @Application private val context: Context,
 ) : FlashlightRepository, CoreStartable {
+
+    /** config_flashlightStrengthTwoStep: [TWO_STEP_MAX_LEVEL] is the full-current torch. */
+    private val twoStepLevels = context.resources.getBoolean(R.bool.config_flashlightStrengthTwoStep)
 
     private sealed interface FlashlightInfo {
         data object NotSupported : FlashlightInfo
@@ -206,8 +213,12 @@ constructor(
                     lensFacing == CameraCharacteristics.LENS_FACING_BACK
 
             if (backFlashlightAvailable) {
-                val default: Int? = cc.get(CameraCharacteristics.FLASH_INFO_STRENGTH_DEFAULT_LEVEL)
-                val max: Int? = cc.get(CameraCharacteristics.FLASH_INFO_STRENGTH_MAXIMUM_LEVEL)
+                val default: Int? =
+                    if (twoStepLevels) TWO_STEP_MAX_LEVEL
+                    else cc.get(CameraCharacteristics.FLASH_INFO_STRENGTH_DEFAULT_LEVEL)
+                val max: Int? =
+                    if (twoStepLevels) TWO_STEP_MAX_LEVEL
+                    else cc.get(CameraCharacteristics.FLASH_INFO_STRENGTH_MAXIMUM_LEVEL)
                 if (default != null) {
                     defaultEnabledLevelForUser[currentUserId] = default
                 }
@@ -244,7 +255,7 @@ constructor(
                                     FlashlightModel.Available.Level(
                                         enabled,
                                         if (enabled) {
-                                            cameraManager.getTorchStrengthLevel(camId)
+                                            toUiLevel(cameraManager.getTorchStrengthLevel(camId))
                                         } else {
                                             defaultEnabledLevelForUser.getOrPut(currentUserId) {
                                                 initialDefaultLevel
@@ -378,11 +389,12 @@ constructor(
             try {
                 if (enabled != currentState.enabled) {
                     if (currentFlashlightInfo.hasAdjustableLevels && enabled) {
-                        cameraManager.turnOnTorchWithStrengthLevel(
+                        turnOnTorchAtLevel(
                             currentFlashlightInfo.cameraId,
                             defaultEnabledLevelForUser.getOrPut(currentUserId) {
                                 initialDefaultLevel
                             },
+                            currentState.enabled,
                         )
                     } else {
                         cameraManager.setTorchMode(currentFlashlightInfo.cameraId, enabled)
@@ -419,7 +431,7 @@ constructor(
 
             try {
                 if (level != currentState.level) {
-                    cameraManager.turnOnTorchWithStrengthLevel(currentInfo.cameraId, level)
+                    turnOnTorchAtLevel(currentInfo.cameraId, level, currentState.enabled)
                 }
                 if (persist) {
                     defaultEnabledLevelForUser[currentUserId] = level
@@ -428,6 +440,23 @@ constructor(
                 e.printStackTrace()
                 logger.w("Error trying to setLevel to $level: ${e.message}")
             }
+        }
+    }
+
+    /** Maps a hardware torch strength level to a UI level; two-step: above medium is max. */
+    private fun toUiLevel(hardwareLevel: Int): Int =
+        if (twoStepLevels && hardwareLevel > BASE_TORCH_LEVEL) TWO_STEP_MAX_LEVEL else hardwareLevel
+
+    /**
+     * Two-step: [TWO_STEP_MAX_LEVEL] is the full-current torch, which only setTorchMode gives. The
+     * torch is turned off first when it is on through the strength path.
+     */
+    private fun turnOnTorchAtLevel(cameraId: String, level: Int, wasEnabled: Boolean) {
+        if (twoStepLevels && level == TWO_STEP_MAX_LEVEL) {
+            if (wasEnabled) cameraManager.setTorchMode(cameraId, false)
+            cameraManager.setTorchMode(cameraId, true)
+        } else {
+            cameraManager.turnOnTorchWithStrengthLevel(cameraId, level)
         }
     }
 
@@ -455,6 +484,7 @@ constructor(
 
     private companion object {
         private const val BASE_TORCH_LEVEL = 1
+        private const val TWO_STEP_MAX_LEVEL = 2
         private val RECONNECT_COOLDOWN = 30.seconds
         private val RECONNECT_TIMEOUT = 2.seconds
     }
