@@ -66,6 +66,15 @@ public final class AttestationService extends SystemService {
     public void onBootPhase(int phase) {
         if (!sDisableGmsProps && CustomUtils.isPackageInstalled(mContext, "com.google.android.gms")
                 && phase == PHASE_BOOT_COMPLETED) {
+            String savedProps = Settings.Secure.getString(
+                    mContext.getContentResolver(), Settings.Secure.FETCHED_PIF);
+            if (savedProps == null || savedProps.isEmpty()) {
+                String defaults = com.android.internal.util.PropImitationHooks.getDefaultPif(mContext);
+                if (!defaults.isEmpty()) {
+                    Settings.Secure.putString(
+                            mContext.getContentResolver(), Settings.Secure.FETCHED_PIF, defaults);
+                }
+            }
             Log.i(TAG, "Scheduling the service");
             mScheduler.scheduleAtFixedRate(
                     new FetchGmsCertifiedProps(), INITIAL_DELAY, INTERVAL, TimeUnit.MINUTES);
@@ -125,6 +134,11 @@ public final class AttestationService extends SystemService {
         public void run() {
             try {
                 dlog("FetchGmsCertifiedProps started");
+
+                if (com.android.internal.util.PropImitationHooks.isPifModuleEnabled(mContext)) {
+                    dlog("PIF mode selected; skipping legacy certified-props updates");
+                    return;
+                }
 
                 if (!isInternetConnected()) {
                     Log.e(TAG, "Internet unavailable");

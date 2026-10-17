@@ -2718,7 +2718,7 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     /* Lenovo: report the Play Store as the installer of the apps picked in
-     * Custom Tweaks, so apps that require a Play install source (for example
+     * Experimental features, so apps that require a Play install source (for example
      * Notein) keep working. Only the app itself sees it: other apps, the Play
      * Store included, still get the real installer. The list is
      * Settings.Global lenovo_play_installer_apps (package names separated by

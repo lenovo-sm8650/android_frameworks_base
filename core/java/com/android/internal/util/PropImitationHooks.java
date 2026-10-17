@@ -33,6 +33,8 @@ import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Log;
 
+import dalvik.system.PathClassLoader;
+
 import com.android.internal.R;
 import com.android.internal.util.custom.KeyProviderManager;
 
@@ -146,7 +148,7 @@ public class PropImitationHooks {
         OFFSET_FIELD = offsetField;
     }
 
-    // Device identity shown to selected apps, from Custom Tweaks:
+    // Device identity shown to selected apps, from Experimental features:
     // Settings.Global lenovo_device_spoof_apps = "pkg=brand|manufacturer|model;...".
     // While the key is unset, config_deviceSpoofApps applies (same
     // entries; a bare package name uses config_deviceSpoof{Brand,
@@ -193,6 +195,33 @@ public class PropImitationHooks {
         return false;
     }
 
+    // The optional GPL module exclusively owns GMS/Play Store spoofing while selected.
+    // Failure must not fall back to legacy props or key-attestation blocking.
+    private static final String PIF_MODULE_SETTING = "lenovo_pif_module";
+    private static final String PIF_MODULE_JAR =
+            "/system_ext/framework/PlayIntegrityFixEntry.jar";
+    private static final String PIF_MODULE_CLASS = "es.chiteroman.playintegrityfix.RomEntry";
+    private static volatile boolean sPifModuleSelected;
+
+    /** Uninstalled or explicitly disabled modules leave legacy PixelOS handling intact. */
+    public static boolean isPifModuleEnabled(Context context) {
+        return new File(PIF_MODULE_JAR).exists()
+                && Settings.Global.getInt(context.getContentResolver(), PIF_MODULE_SETTING, 1) != 0;
+    }
+
+    private static void loadPifModule(Context context, String processName) {
+        try {
+            final Class<?> entry = new PathClassLoader(PIF_MODULE_JAR,
+                    ClassLoader.getSystemClassLoader()).loadClass(PIF_MODULE_CLASS);
+            if (!Boolean.TRUE.equals(entry.getMethod("init", Context.class, String.class)
+                    .invoke(null, context, processName))) {
+                Log.e(TAG, "PIF initialization failed; legacy spoofing remains disabled");
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "Failed to load PIF; legacy spoofing remains disabled", t);
+        }
+    }
+
     public static void setProps(Context context) {
         final String packageName = context.getPackageName();
         final String processName = Application.getProcessName();
@@ -216,7 +245,7 @@ public class PropImitationHooks {
         sIsFinsky = packageName.equals(PACKAGE_FINSKY);
         sIsPhotos = packageName.equals(PACKAGE_GPHOTOS);
 
-        // The selected apps of Custom Tweaks see another device instead of
+        // The selected apps of Experimental features see another device instead of
         // the other spoofs below. Play services and the Play Store never do.
         if (!sIsGms && !sIsFinsky && !packageName.equals(PACKAGE_GMS)
                 && setDeviceSpoofProps(context, res, packageName)) {
@@ -230,7 +259,12 @@ public class PropImitationHooks {
          */
         if (sIsGms || sIsFinsky) {
             if (!android.os.Process.isIsolated()) {
-                setPlayIntegrityProps(context);
+                sPifModuleSelected = isPifModuleEnabled(context);
+                if (sPifModuleSelected) {
+                    loadPifModule(context, processName);
+                } else {
+                    setPlayIntegrityProps(context);
+                }
             } else {
                 dlog("Not setting Play Integrity props in isolated process");
             }
@@ -274,6 +308,16 @@ public class PropImitationHooks {
         }
     }
 
+    /** Built-in legacy JSON profile, also used before the first successful update. */
+    public static String getDefaultPif(Context context) {
+        try (java.io.InputStream input = context.getResources().openRawResource(R.raw.pif_default)) {
+            return new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (IOException | Resources.NotFoundException e) {
+            Log.e(TAG, "Unable to read the default PIF profile", e);
+            return "";
+        }
+    }
+
     private static void setPlayIntegrityProps(Context context) {
         if (sDisableGmsProps) {
             dlog("GMS prop imitation is disabled by user");
@@ -289,6 +333,11 @@ public class PropImitationHooks {
         String savedProps = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.PIF_DATA);
         if (savedProps == null || TextUtils.isEmpty(savedProps)) {
             savedProps = Settings.Secure.getString(context.getContentResolver(), Settings.Secure.FETCHED_PIF);
+        }
+
+        if (TextUtils.isEmpty(savedProps)
+                && context.getResources().getStringArray(R.array.config_certifiedBuildProperties).length == 0) {
+            savedProps = getDefaultPif(context);
         }
 
         if (savedProps == null || TextUtils.isEmpty(savedProps)) {
@@ -385,7 +434,7 @@ public class PropImitationHooks {
     }
 
     public static boolean shouldBypassTaskPermission(Context context) {
-        if (sDisableGmsProps) {
+        if (sDisableGmsProps || isPifModuleEnabled(context)) {
             return false;
         }
 
@@ -409,6 +458,10 @@ public class PropImitationHooks {
     }
 
     public static void onEngineGetCertificateChain() {
+        if (sPifModuleSelected) {
+            dlog("PIF mode selected; legacy key attestation blocking is disabled");
+            return;
+        }
         if (sDisableKeyAttestationBlock) {
             dlog("Key attestation blocking is disabled by user");
             return;
