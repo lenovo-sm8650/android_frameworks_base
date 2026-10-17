@@ -4306,6 +4306,22 @@ class DesktopTasksController(
             logV("skip keyguard is locked")
             return null
         }
+        // Outside of an explicitly entered desktop mode (the display is touch-first and no desk
+        // is active) an app that launches as a freeform window (a small or fixed-size window, a
+        // freeform launch option or a remembered freeform launch) opens fullscreen instead of
+        // starting a desktop session. Desktop-first displays (Desktop mode tile, keyboard or
+        // external display) and active desks keep launching freeform tasks into the desk.
+        if (
+            !rootTaskDisplayAreaOrganizer.isDisplayDesktopFirst(task.displayId) &&
+                shouldFreeformTaskLaunchSwitchToFullscreen(task) &&
+                !userRepositories.getProfile(task.userId).isActiveTask(task.taskId)
+        ) {
+            logV("handleFreeformTaskLaunch touch-first, no desk active: launch fullscreen")
+            return WindowContainerTransaction().also { wct ->
+                addMoveToFullscreenChanges(wct, task, willExitDesktop = false)
+                    ?.invoke(transition)
+            }
+        }
         return handleFreeformTaskPlacement(
             task = task,
             transition = transition,
