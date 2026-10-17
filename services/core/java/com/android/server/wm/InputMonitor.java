@@ -281,6 +281,12 @@ final class InputMonitor {
                     Integer.toHexString(w.mAttrs.inputFeatures));
         }
 
+        // Lenovo pen ink mode: the stock ZUI dispatcher routes stylus events to the
+        // not touchable "InkWindow" of PenService in ink mode; fingers still
+        // reach the app below. INTERCEPTS_STYLUS does the same for a trusted overlay.
+        inputWindowHandle.setInputConfigMasked(isPenInkWindow(w) ? InputConfig.INTERCEPTS_STYLUS : 0,
+                InputConfig.INTERCEPTS_STYLUS);
+
         final boolean focusable = w.canReceiveKeys()
                 && (mDisplayContent.hasOwnFocus() || mDisplayContent.isOnTop());
         if (inputWindowHandle.setFocusable(focusable) && !focusable) {
@@ -728,6 +734,14 @@ final class InputMonitor {
         inputWindowHandle.setTrustedOverlay(t, sc, true);
         populateOverlayInputInfo(inputWindowHandle);
         setInputWindowInfoIfNeeded(t, sc, inputWindowHandle);
+    }
+
+    // PenService adds the InkWindow only while ink mode is on. Called under the
+    // WindowManager lock for every window: window attributes only, no settings reads.
+    private static boolean isPenInkWindow(WindowState w) {
+        return (w.mAttrs.privateFlags & WindowManager.LayoutParams.PRIVATE_FLAG_TRUSTED_OVERLAY) != 0
+                && "InkWindow".contentEquals(w.mAttrs.getTitle())
+                && "com.lenovo.penservice".equals(w.getOwningPackage());
     }
 
     static boolean isTrustedOverlay(int type) {
