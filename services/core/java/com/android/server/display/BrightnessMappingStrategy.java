@@ -956,6 +956,18 @@ public abstract class BrightnessMappingStrategy {
             }
 
             float brightness = mAdjustedNitsToBrightnessSpline.interpolate(nits);
+            if (ZuiDisplayHooks.isAutoBrightness() && mUserLux == INVALID_LUX) {
+                // ZUI: without a user data point, the automatic brightness is moved up to the
+                // next brightness point of the display (stock PhysicalMappingStrategy). The
+                // first segment (the points 0 and 1) is left smooth.
+                for (int i = 0; i < mBrightness.length && (i != 1 || brightness > mBrightness[1]);
+                        i++) {
+                    if (brightness < mBrightness[i] + 1.0E-6f) {
+                        brightness = mBrightness[i];
+                        break;
+                    }
+                }
+            }
             // Correct the brightness according to the current application and its category, but
             // only if no user data point is set (as this will override the user setting).
             if (mUserLux == -1) {

@@ -137,6 +137,27 @@ public class AutomaticBrightnessController {
     // How much to scale doze brightness by (should be (0, 1.0]).
     private final float mDozeScaleFactor;
 
+    // ZUI (stock AutomaticBrightnessController): the proximity sensor holds the changes of the
+    // ambient light while the sensor is covered.
+    private final boolean mZuiAutoBrightness = ZuiDisplayHooks.isAutoBrightness();
+    private Sensor mProximitySensor;
+    private boolean mProximityNear;
+    private boolean mFromAutoChange;
+    private final SensorEventListener mProximitySensorListener = new SensorEventListener() {
+        @Override
+        public void onSensorChanged(SensorEvent event) {
+            if (!mLightSensorEnabled || event.sensor.getType() != Sensor.TYPE_PROXIMITY
+                    || event.values.length <= 0 || mProximitySensor == null) {
+                return;
+            }
+            mProximityNear = event.values[0] < mProximitySensor.getMaximumRange();
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int accuracy) {
+        }
+    };
+
     // Initial light sensor event rate in milliseconds.
     private final int mInitialLightSensorRate;
 
@@ -382,6 +403,9 @@ public class AutomaticBrightnessController {
         mBrightnessClamperController = clamperController;
         mBrightnessMappingStrategyMap = brightnessMappingStrategyMap;
         mDisplayManagerFlags = displayManagerFlags;
+        if (mZuiAutoBrightness) {
+            mProximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
+        }
 
         // Use the given short-term model
         if (userNits != BrightnessMappingStrategy.INVALID_NITS) {
@@ -472,6 +496,9 @@ public class AutomaticBrightnessController {
             boolean useNormalBrightnessForDoze, boolean shouldResetShortTermModel,
             boolean autoBrightnessOneShot) {
         mState = state;
+        if (mZuiAutoBrightness) {
+            ZuiDisplayHooks.setAutoBrightnessEnable(mState == AUTO_BRIGHTNESS_ENABLED);
+        }
         boolean changed = setBrightnessConfiguration(configuration, shouldResetShortTermModel);
         changed |= setDisplayPolicy(displayPolicy);
         mDisplayState = displayState;
@@ -750,6 +777,16 @@ public class AutomaticBrightnessController {
                 registerForegroundAppUpdater();
                 mSensorManager.registerListener(mLightSensorListener, mLightSensor,
                         mCurrentLightSensorRate * 1000, mHandler);
+                if (mProximitySensor != null) {
+                    // stock registers it 50 ms later, at SENSOR_DELAY_NORMAL
+                    mHandler.postDelayed(() -> {
+                        if (mLightSensorEnabled) {
+                            mSensorManager.unregisterListener(mProximitySensorListener);
+                            mSensorManager.registerListener(mProximitySensorListener,
+                                    mProximitySensor, SensorManager.SENSOR_DELAY_NORMAL, mHandler);
+                        }
+                    }, 50);
+                }
                 return true;
             }
         } else if (mLightSensorEnabled) {
@@ -767,6 +804,9 @@ public class AutomaticBrightnessController {
             mHandler.removeMessages(MSG_UPDATE_AMBIENT_LUX);
             unregisterForegroundAppUpdater();
             mSensorManager.unregisterListener(mLightSensorListener);
+            if (mProximitySensor != null) {
+                mSensorManager.unregisterListener(mProximitySensorListener);
+            }
         }
         return false;
     }
@@ -832,6 +872,9 @@ public class AutomaticBrightnessController {
                     mAmbientBrightnessThresholds.getDarkeningThreshold(lux);
         }
         mBrightnessRangeController.onAmbientLuxChange(mAmbientLux);
+        if (mZuiAutoBrightness) {
+            ZuiDisplayHooks.setLux(mAmbientLux);
+        }
 
         // If the short term model was invalidated and the change is drastic enough, reset it.
         mShortTermModel.maybeReset(mAmbientLux);
@@ -989,7 +1032,9 @@ public class AutomaticBrightnessController {
                         + "mAmbientLightRingBuffer=" + mAmbientLightRingBuffer + ", "
                         + "mAmbientLux=" + mAmbientLux);
             }
+            mFromAutoChange = true;
             updateAutoBrightness(true /* sendUpdate */, false /* isManuallySet */);
+            mFromAutoChange = false;
             nextBrightenTransition = nextAmbientLightBrighteningTransition(time);
             nextDarkenTransition = nextAmbientLightDarkeningTransition(time);
         }
@@ -1020,6 +1065,9 @@ public class AutomaticBrightnessController {
 
     private void updateAutoBrightness(boolean sendUpdate, boolean isManuallySet) {
         if (!mAmbientLuxValid) {
+            return;
+        }
+        if (mZuiAutoBrightness && mProximityNear && mFromAutoChange) {
             return;
         }
 
@@ -1057,7 +1105,12 @@ public class AutomaticBrightnessController {
         if (!withinThreshold) {
             mPreThresholdBrightness = mScreenAutoBrightness;
         }
-        mScreenAutoBrightness = newScreenAutoBrightness;
+        if (!mZuiAutoBrightness
+                || Math.abs(mScreenAutoBrightness - newScreenAutoBrightness)
+                        >= ZuiDisplayHooks.AUTO_BRIGHTNESS_STEP
+                || sendUpdate) {
+            mScreenAutoBrightness = newScreenAutoBrightness;
+        }
         if (isInIdleMode()) {
             mScreenBrighteningThreshold = clampScreenBrightness(
                     mScreenBrightnessThresholdsIdle.getBrighteningThreshold(
@@ -1212,7 +1265,9 @@ public class AutomaticBrightnessController {
         mPendingForegroundAppPackageName = null;
         mForegroundAppCategory = mPendingForegroundAppCategory;
         mPendingForegroundAppCategory = ApplicationInfo.CATEGORY_UNDEFINED;
+        mFromAutoChange = true;
         updateAutoBrightness(true /* sendUpdate */, false /* isManuallySet */);
+        mFromAutoChange = false;
     }
 
     private void switchModeAndShortTermModels(@AutomaticBrightnessMode int mode) {
