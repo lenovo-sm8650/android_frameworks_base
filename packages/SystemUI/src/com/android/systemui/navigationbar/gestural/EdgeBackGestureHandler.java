@@ -55,6 +55,7 @@ import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
 import android.provider.DeviceConfig;
+import android.provider.Settings;
 import android.util.ArraySet;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -979,6 +980,27 @@ public class EdgeBackGestureHandler {
         return mMLResults >= mMLModelThreshold ? 1 : 0;
     }
 
+    /**
+     * Stock ZuiEdgeBackGestureHandler.updateDisabledStylusGestureMode(): the pen settings switch
+     * "Accidental touch protection for operations" (key_pen_mode_disable_utouch) keeps the stylus
+     * from starting the back gesture at the screen edge; until the switch has a value, writing
+     * with a pen in a writing app (lenovo_pen_writing) does the same.
+     */
+    private boolean isStylusGestureDisabled(MotionEvent ev) {
+        int tool = ev.getToolType(0);
+        if (tool != MotionEvent.TOOL_TYPE_STYLUS && tool != MotionEvent.TOOL_TYPE_ERASER) {
+            return false;
+        }
+        int user = ActivityManager.getCurrentUser();
+        int disable = Settings.System.getIntForUser(mContext.getContentResolver(),
+                "key_pen_mode_disable_utouch", -1, user);
+        if (disable != -1) {
+            return disable == 1;
+        }
+        return Settings.System.getIntForUser(mContext.getContentResolver(),
+                "lenovo_pen_writing", -1, user) == 1;
+    }
+
     private boolean isWithinInsets(int x, int y) {
         // Disallow if we are in the bottom gesture area
         if (y >= (mDisplaySize.y - mBottomGestureHeight)) {
@@ -1142,7 +1164,8 @@ public class EdgeBackGestureHandler {
                         && displayBackGestureHandler.isValidTrackpadBackGesture();
             } else {
                 mAllowGesture = isBackAllowedCommon && !mUsingThreeButtonNav && isWithinInsets
-                        && isWithinTouchRegion(ev) && !isButtonPressFromTrackpadOrMouse(ev);
+                        && isWithinTouchRegion(ev) && !isButtonPressFromTrackpadOrMouse(ev)
+                        && !isStylusGestureDisabled(ev);
             }
             if (mAllowGesture) {
                 displayBackGestureHandler.setIsLeftPanel(mIsOnLeftEdge);
