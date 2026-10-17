@@ -233,7 +233,11 @@ public final class InputGestureData {
         }
 
         private KeyTrigger(int keycode, int modifierState) {
-            if (keycode <= KeyEvent.KEYCODE_UNKNOWN || keycode > KeyEvent.getMaxKeyCode()) {
+            // Stock accepts the ZUI keycodes here (KeyEvent.isZUXKeycode); without it the
+            // pen double tap (601) throws from KeyGestureController before it is dispatched.
+            if (keycode <= KeyEvent.KEYCODE_UNKNOWN
+                    || (keycode > KeyEvent.getMaxKeyCode()
+                            && keycode != KeyEvent.KEYCODE_PEN_TWO_CLICK)) {
                 throw new IllegalArgumentException("Invalid keycode = " + keycode);
             }
             mAidlKeyTrigger = new AidlInputGestureData.KeyTrigger();
