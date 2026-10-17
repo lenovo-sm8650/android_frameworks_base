@@ -4094,6 +4094,19 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     + ", repeatCount=" + event.getRepeatCount());
         }
 
+        final KeyInterceptionInfo focusedInfo =
+                mWindowManagerInternal.getKeyInterceptionInfoFromToken(focusedToken);
+        final int focusedUid = focusedInfo == null ? -1 : focusedInfo.windowOwnerUid;
+        for (DeviceKeyHandler handler : mDeviceKeyHandlers) {
+            try {
+                if (handler.handleUnhandledKeyEvent(event, focusedUid)) {
+                    return true;
+                }
+            } catch (Exception e) {
+                Slog.w(TAG, "Could not dispatch unhandled key to device key handler", e);
+            }
+        }
+
         final int keyCode = event.getKeyCode();
         // TODO(b/358569822): Shift to KeyGestureEvent based handling
         if (keyCode == KeyEvent.KEYCODE_STEM_PRIMARY) {
