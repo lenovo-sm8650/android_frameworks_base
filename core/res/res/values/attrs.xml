@@ -10014,8 +10014,8 @@
         <attr name="pointerIconGrabbing" format="reference"/>
         <!-- Reference to a pointer drawable with HANDWRITING. -->
         <attr name="pointerIconHandwriting" format="reference"/>
-        <!-- Reference to a pointer drawable with the Lenovo stylus hover ring. -->
-        <attr name="pointerIconLenovoPenHover" format="reference"/>
+        <!-- Reference to a pointer drawable with the Lenovo stylus hover ring. Named to sort after every other private attr: prebuilt system apps (Pixel Launcher) bake in the attr-private IDs, which follow the name order. -->
+        <attr name="zuiPointerIconPenHover" format="reference"/>
     </declare-styleable>
 
     <declare-styleable name="PointerIcon">
