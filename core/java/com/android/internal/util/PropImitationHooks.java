@@ -147,12 +147,12 @@ public class PropImitationHooks {
     }
 
     // Device identity shown to selected apps, from Custom Tweaks:
-    // Settings.Global tb520fu_device_spoof_apps = "pkg=brand|manufacturer|model;...".
-    // While the key is unset, config_tb520fuDeviceSpoofApps applies (same
-    // entries; a bare package name uses config_tb520fuDeviceSpoof{Brand,
+    // Settings.Global lenovo_device_spoof_apps = "pkg=brand|manufacturer|model;...".
+    // While the key is unset, config_deviceSpoofApps applies (same
+    // entries; a bare package name uses config_deviceSpoof{Brand,
     // Manufacturer,Model}). Empty fields keep the real value. The defaults are
     // empty, so a build without an overlay changes nothing.
-    private static final String DEVICE_SPOOF_APPS = "tb520fu_device_spoof_apps";
+    private static final String DEVICE_SPOOF_APPS = "lenovo_device_spoof_apps";
 
     /** Applies the device identity if the app is selected; true if anything changed. */
     private static boolean setDeviceSpoofProps(Context context, Resources res, String packageName) {
@@ -163,7 +163,7 @@ public class PropImitationHooks {
             final String apps = Settings.Global.getString(context.getContentResolver(),
                     DEVICE_SPOOF_APPS);
             final String[] entries = apps != null ? apps.split(";")
-                    : res.getStringArray(R.array.config_tb520fuDeviceSpoofApps);
+                    : res.getStringArray(R.array.config_deviceSpoofApps);
             for (String entry : entries) {
                 final int eq = entry.indexOf('=');
                 final String pkg = eq >= 0 ? entry.substring(0, eq) : entry;
@@ -172,9 +172,9 @@ public class PropImitationHooks {
                 }
                 final String[] fields = eq >= 0 ? entry.substring(eq + 1).split("\\|", -1)
                         : new String[] {
-                            res.getString(R.string.config_tb520fuDeviceSpoofBrand),
-                            res.getString(R.string.config_tb520fuDeviceSpoofManufacturer),
-                            res.getString(R.string.config_tb520fuDeviceSpoofModel),
+                            res.getString(R.string.config_deviceSpoofBrand),
+                            res.getString(R.string.config_deviceSpoofManufacturer),
+                            res.getString(R.string.config_deviceSpoofModel),
                         };
                 final String[] props = {"BRAND", "MANUFACTURER", "MODEL"};
                 boolean changed = false;

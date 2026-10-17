@@ -2721,22 +2721,22 @@ public class ApplicationPackageManager extends PackageManager {
      * Custom Tweaks, so apps that require a Play install source (for example
      * Notein) keep working. Only the app itself sees it: other apps, the Play
      * Store included, still get the real installer. The list is
-     * Settings.Global tb520fu_play_installer_apps (package names separated by
+     * Settings.Global lenovo_play_installer_apps (package names separated by
      * ';'), read live through the settings provider, so a change applies
      * without a restart and apps need no extra SELinux access.
      */
-    private static final String TB520FU_PLAY_STORE_PACKAGE = "com.android.vending";
-    private static final String TB520FU_PLAY_INSTALLER_APPS = "tb520fu_play_installer_apps";
+    private static final String PLAY_STORE_PACKAGE = "com.android.vending";
+    private static final String PLAY_INSTALLER_APPS = "lenovo_play_installer_apps";
 
-    private boolean tb520fuReportPlayInstaller(String packageName, String installer) {
-        if (packageName == null || TB520FU_PLAY_STORE_PACKAGE.equals(installer)
+    private boolean reportPlayInstaller(String packageName, String installer) {
+        if (packageName == null || PLAY_STORE_PACKAGE.equals(installer)
                 || !packageName.equals(mContext.getPackageName())) {
             return false;
         }
         final String apps;
         try {
             apps = Settings.Global.getString(mContext.getContentResolver(),
-                    TB520FU_PLAY_INSTALLER_APPS);
+                    PLAY_INSTALLER_APPS);
         } catch (RuntimeException e) {
             // Isolated processes cannot reach the settings provider.
             return false;
@@ -2756,8 +2756,8 @@ public class ApplicationPackageManager extends PackageManager {
     public String getInstallerPackageName(String packageName) {
         try {
             final String installer = mPM.getInstallerPackageName(packageName);
-            if (tb520fuReportPlayInstaller(packageName, installer)) {
-                return TB520FU_PLAY_STORE_PACKAGE;
+            if (reportPlayInstaller(packageName, installer)) {
+                return PLAY_STORE_PACKAGE;
             }
             return installer;
         } catch (RemoteException e) {
@@ -2777,11 +2777,11 @@ public class ApplicationPackageManager extends PackageManager {
         if (installSourceInfo == null) {
             throw new NameNotFoundException(packageName);
         }
-        if (tb520fuReportPlayInstaller(packageName,
+        if (reportPlayInstaller(packageName,
                 installSourceInfo.getInstallingPackageName())) {
             return new InstallSourceInfo(installSourceInfo.getInitiatingPackageName(),
                     installSourceInfo.getInitiatingPackageSigningInfo(),
-                    installSourceInfo.getOriginatingPackageName(), TB520FU_PLAY_STORE_PACKAGE,
+                    installSourceInfo.getOriginatingPackageName(), PLAY_STORE_PACKAGE,
                     installSourceInfo.getUpdateOwnerPackageName(),
                     installSourceInfo.getPackageSource());
         }

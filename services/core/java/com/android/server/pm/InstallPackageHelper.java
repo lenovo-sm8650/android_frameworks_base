@@ -223,8 +223,8 @@ final class InstallPackageHelper {
     private static final String INSTALLER_WAKE_LOCK_TAG = "installer:packages";
 
     // TB520FU: packages the Play Store may not install or update.
-    private static final String TB520FU_PLAY_STORE = "com.android.vending";
-    private static final Set<String> TB520FU_PLAY_BLOCKED_PACKAGES =
+    private static final String PLAY_STORE_PACKAGE = "com.android.vending";
+    private static final Set<String> PLAY_BLOCKED_PACKAGES =
             Set.of("com.google.android.GoogleCamera");
 
     /**
@@ -1740,10 +1740,10 @@ final class InstallPackageHelper {
         // Only the initiating package counts: it is the real caller, while the
         // installer name can be set to the Play Store on purpose (adb install
         // -i com.android.vending, installers with INSTALL_PACKAGES).
-        if (TB520FU_PLAY_BLOCKED_PACKAGES.contains(pkgName)) {
+        if (PLAY_BLOCKED_PACKAGES.contains(pkgName)) {
             final InstallSource source = request.getInstallSource();
             if (source != null
-                    && TB520FU_PLAY_STORE.equals(source.mInitiatingPackageName)) {
+                    && PLAY_STORE_PACKAGE.equals(source.mInitiatingPackageName)) {
                 Slog.w(TAG, "Play Store install of " + pkgName + " blocked");
                 throw new PrepareFailure(PackageManager.INSTALL_FAILED_USER_RESTRICTED,
                         "Installing " + pkgName + " from the Play Store is blocked");

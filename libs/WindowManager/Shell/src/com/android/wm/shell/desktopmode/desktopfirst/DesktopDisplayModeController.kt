@@ -463,10 +463,10 @@ class DesktopDisplayModeController(
 
     companion object {
         const val KEYBOARD_SYSTEM_MODE = "enter_work_mode_from_keyboard"
-        const val KEYBOARD_DESKTOP_MODE_EXITED = "tb520fu_keyboard_desktop_mode_exited"
-        const val PC_MODE = "tb520fu_pc_mode"
+        const val KEYBOARD_DESKTOP_MODE_EXITED = "lenovo_keyboard_desktop_mode_exited"
+        const val PC_MODE = "lenovo_pc_mode"
         const val EXTERNAL_DISPLAY_DESKTOP_MODE_EXITED =
-            "tb520fu_external_display_desktop_mode_exited"
+            "lenovo_external_display_desktop_mode_exited"
 
         private const val TAG = "DesktopDisplayModeController"
     }

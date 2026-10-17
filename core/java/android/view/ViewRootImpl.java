@@ -8964,10 +8964,10 @@ public final class ViewRootImpl implements ViewParent,
         if (pointerIcon == null) {
             pointerIcon = mView.onResolvePointerIcon(event, pointerIndex);
         }
-        if (pointerIcon == null && event.isStylusPointer() && tb520fuPenHoverPointer()) {
+        if (pointerIcon == null && event.isStylusPointer() && lenovoPenHoverPointer()) {
             // TB520FU: the default stylus icon is empty; the Lenovo pen setting
             // "Show pointer when hovering" asks for a visible one.
-            pointerIcon = tb520fuPenHoverIcon();
+            pointerIcon = lenovoPenHoverIcon();
         }
         if (pointerIcon == null) {
             pointerIcon = PointerIcon.getSystemIcon(mContext, PointerIcon.TYPE_NOT_SPECIFIED);
@@ -8991,30 +8991,30 @@ public final class ViewRootImpl implements ViewParent,
      */
     // TB520FU: the system hover spot (TYPE_SPOT_HOVER, 24dp) at 16dp, closer to
     // the stock ZUI pen pointer. Kept per density.
-    private static final float TB520FU_PEN_HOVER_ICON_SCALE = 16f / 24f;
-    private static PointerIcon sTb520fuPenHoverIcon;
-    private static float sTb520fuPenHoverIconDensity;
+    private static final float LENOVO_PEN_HOVER_ICON_SCALE = 16f / 24f;
+    private static PointerIcon sLenovoPenHoverIcon;
+    private static float sLenovoPenHoverIconDensity;
 
-    private PointerIcon tb520fuPenHoverIcon() {
+    private PointerIcon lenovoPenHoverIcon() {
         final float density = mContext.getResources().getDisplayMetrics().density;
         synchronized (ViewRootImpl.class) {
-            if (sTb520fuPenHoverIcon == null || sTb520fuPenHoverIconDensity != density) {
+            if (sLenovoPenHoverIcon == null || sLenovoPenHoverIconDensity != density) {
                 final Bitmap spot = PointerIcon.getLoadedSystemIcon(mContext,
-                        PointerIcon.TYPE_SPOT_HOVER, false, TB520FU_PEN_HOVER_ICON_SCALE)
+                        PointerIcon.TYPE_SPOT_HOVER, false, LENOVO_PEN_HOVER_ICON_SCALE)
                         .getBitmap();
                 if (spot == null) {
                     return PointerIcon.getSystemIcon(mContext, PointerIcon.TYPE_SPOT_HOVER);
                 }
                 // The spot is round: its hot spot is the centre.
-                sTb520fuPenHoverIcon = PointerIcon.create(spot,
+                sLenovoPenHoverIcon = PointerIcon.create(spot,
                         spot.getWidth() / 2f, spot.getHeight() / 2f);
-                sTb520fuPenHoverIconDensity = density;
+                sLenovoPenHoverIconDensity = density;
             }
-            return sTb520fuPenHoverIcon;
+            return sLenovoPenHoverIcon;
         }
     }
 
-    private boolean tb520fuPenHoverPointer() {
+    private boolean lenovoPenHoverPointer() {
         try {
             final String value = Settings.Global.getString(mContext.getContentResolver(),
                     "stylus_change_icon");
