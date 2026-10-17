@@ -8965,6 +8965,13 @@ public final class ViewRootImpl implements ViewParent,
         if (pointerIcon == null) {
             pointerIcon = PointerIcon.getSystemIcon(mContext, PointerIcon.TYPE_NOT_SPECIFIED);
         }
+        if (event.isStylusPointer()) {
+            // Stock ZUI ViewRootImpl.updatePointerIcon: the Lenovo pen setting
+            // stylus_change_icon ("1:1" = show pointer when hovering) replaces whatever icon the
+            // app resolved with the pen hover ring; when off the stylus gets no icon at all.
+            pointerIcon = PointerIcon.getSystemIcon(mContext, isLenovoPenHoverIconOn()
+                    ? PointerIcon.TYPE_LENOVO_PEN_HOVER : PointerIcon.TYPE_NULL);
+        }
         if (Objects.equals(mResolvedPointerIcon, pointerIcon)) {
             return true;
         }
@@ -8974,6 +8981,12 @@ public final class ViewRootImpl implements ViewParent,
                 .setPointerIcon(pointerIcon, event.getDisplayId(),
                         event.getDeviceId(), event.getPointerId(0), getInputToken());
         return true;
+    }
+
+    /** Stock ZUI ZuiHandWritingService.updatePenHoverIconStatus: stylus_change_icon == "1:1". */
+    private boolean isLenovoPenHoverIconOn() {
+        return "1:1".equals(android.provider.Settings.Global.getString(
+                mContext.getContentResolver(), "stylus_change_icon"));
     }
 
     private void maybeUpdateTooltip(MotionEvent event) {
