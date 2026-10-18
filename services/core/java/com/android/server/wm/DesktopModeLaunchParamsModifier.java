@@ -172,6 +172,15 @@ class DesktopModeLaunchParamsModifier extends DefaultLaunchParamsModifier {
             return RESULT_SKIP;
         }
 
+        if (isFreeformOptionOutsideDesktop(task, options, suggestedDisplayArea)) {
+            // WM Shell opens such a launch fullscreen anyway (DesktopTasksController
+            // handleFreeformTaskLaunch, FreeformFallbackTransitionObserver); resolve it here
+            // so the task never shows as a freeform window first.
+            appendLog("freeform launch option outside desktop, launching in fullscreen");
+            outParams.mWindowingMode = WINDOWING_MODE_FULLSCREEN;
+            return RESULT_DONE;
+        }
+
         if (!isEnteringDesktopMode(task, source, options, suggestedDisplayArea)) {
             appendLog("not entering desktop mode, skipping");
             if (currentParams.mWindowingMode == WINDOWING_MODE_FREEFORM) {
@@ -378,6 +387,24 @@ class DesktopModeLaunchParamsModifier extends DefaultLaunchParamsModifier {
             return DesktopModeHelper.canInternalDisplayHostDesktops(mContext);
         }
         return display.isEligibleForDesktopMode();
+    }
+
+    /**
+     * Returns true if the launch asks for a freeform window while desktop windowing is off: the
+     * display is touch-first (not desktop-first) and no freeform task (desk) is visible on it.
+     * Such an app (a small window, or a trampoline launching with the freeform option) opens
+     * fullscreen instead of starting a desktop session.
+     */
+    private boolean isFreeformOptionOutsideDesktop(
+            @NonNull Task task,
+            @Nullable ActivityOptions options,
+            @NonNull TaskDisplayArea taskDisplayArea) {
+        if (options == null || options.getLaunchWindowingMode() != WINDOWING_MODE_FREEFORM
+                || task.inFreeformWindowingMode() || taskDisplayArea.inFreeformWindowingMode()) {
+            return false;
+        }
+        return task.getDisplayContent().getTask(
+                t -> t.inFreeformWindowingMode() && t.isVisibleRequested()) == null;
     }
 
     private boolean isRequestingFreeformWindowMode(
