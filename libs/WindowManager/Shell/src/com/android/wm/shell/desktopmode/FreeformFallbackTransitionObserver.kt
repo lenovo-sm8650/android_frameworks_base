@@ -91,6 +91,15 @@ class FreeformFallbackTransitionObserver(
                 val runAllOnTransitStart: MutableSet<RunOnTransitStart> = mutableSetOf()
                 val pendingDeskActivations: MutableSet<Int> = mutableSetOf()
                 for (task in pendingMoveToDeskTasks) {
+                    // A freeform launch that no transition request saw (a trampoline turning an
+                    // opened fullscreen task freeform) follows handleFreeformTaskLaunch: outside
+                    // of an explicitly entered desktop mode it goes fullscreen, not into a desk.
+                    if (deskTasksController.shouldOpenFreeformLaunchFullscreen(task)) {
+                        deskTasksController
+                            .addMoveToFullscreenChanges(wct, task, willExitDesktop = false)
+                            ?.let { runAllOnTransitStart.add(it) }
+                        continue
+                    }
                     val repository = desktopUserRepositories.getProfile(task.userId)
                     // Create desk if one does not exit for display.
                     val targetDeskId: Int? =
