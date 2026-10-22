@@ -9,6 +9,7 @@ import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
+import android.os.UserHandle;
 import android.hardware.security.keymint.Algorithm;
 import android.hardware.security.keymint.EcCurve;
 import android.hardware.security.keymint.KeyParameter;
@@ -139,15 +140,30 @@ public final class KeyboxChainGenerator {
         return result;
     }
 
+    /** ro.boot.vbmeta.digest as bytes; random only when the bootloader did not provide a valid one. */
+    private static byte[] bootHash(SecureRandom random) {
+        String digest = android.os.SystemProperties.get("ro.boot.vbmeta.digest", "");
+        if (digest.matches("[0-9a-fA-F]{64}") && !digest.matches("0{64}")) {
+            byte[] hash = new byte[32];
+            for (int i = 0; i < 32; i++) {
+                hash[i] = (byte) Integer.parseInt(digest.substring(2 * i, 2 * i + 2), 16);
+            }
+            return hash;
+        }
+        byte[] hash = new byte[32];
+        random.nextBytes(hash);
+        return hash;
+    }
+
     private static Extension createExtension(KeyGenParameters params, int uid) {
         try {
             SecureRandom random = new SecureRandom();
 
-            byte[] bytes1 = new byte[32];
-            byte[] bytes2 = new byte[32];
-
-            random.nextBytes(bytes1);
-            random.nextBytes(bytes2);
+            // The boot hash is the vbmeta digest the device really booted with and the boot key
+            // is derived from it, so that every attestation reports the same root of trust.
+            byte[] bytes2 = bootHash(random);
+            byte[] bytes1 = java.security.MessageDigest.getInstance("SHA-256").digest(
+                    java.util.Arrays.copyOf(bytes2, bytes2.length + 1));
 
             ASN1Encodable[] rootOfTrustEncodables = {new DEROctetString(bytes1), ASN1Boolean.TRUE,
                     new ASN1Enumerated(0), new DEROctetString(bytes2)};
@@ -234,12 +250,24 @@ public final class KeyboxChainGenerator {
         return major * 10000 + minor * 100 + patch;
     }
 
+    // Set by KeyboxAttestationService (system_server) before signing; empty means Build.
+    private static volatile String sSecurityPatch = "";
+
+    public static void setSecurityPatch(String patch) {
+        sSecurityPatch = patch == null ? "" : patch;
+    }
+
+    private static String getSecurityPatch() {
+        String patch = sSecurityPatch;
+        return patch.isEmpty() ? Build.VERSION.SECURITY_PATCH : patch;
+    }
+
     private static int getPatchLevel() {
-        return convertPatchLevel(Build.VERSION.SECURITY_PATCH, false);
+        return convertPatchLevel(getSecurityPatch(), false);
     }
 
     private static int getPatchLevelLong() {
-        return convertPatchLevel(Build.VERSION.SECURITY_PATCH, true);
+        return convertPatchLevel(getSecurityPatch(), true);
     }
 
     private static int convertPatchLevel(String patchLevel, boolean longFormat) {
@@ -278,7 +306,8 @@ public final class KeyboxChainGenerator {
     }
 
     private static DEROctetString createApplicationId(int uid) throws Throwable {
-        Context context = ActivityThread.currentApplication();
+        // Runs in system_server only (KeyboxAttestationService)
+        Context context = ActivityThread.currentActivityThread().getSystemContext();
         if (context == null) {
             throw new IllegalStateException("createApplicationId: context not available from ActivityThread!");
         }
@@ -300,7 +329,8 @@ public final class KeyboxChainGenerator {
 
         for (int i = 0; i < size; i++) {
             String name = packages[i];
-            PackageInfo info = pm.getPackageInfo(name, PackageManager.GET_SIGNATURES);
+            PackageInfo info = pm.getPackageInfoAsUser(name, PackageManager.GET_SIGNATURES,
+                    UserHandle.getUserId(uid));
             ASN1Encodable[] arr = new ASN1Encodable[2];
             arr[ATTESTATION_PACKAGE_INFO_PACKAGE_NAME_INDEX] =
                     new DEROctetString(name.getBytes(StandardCharsets.UTF_8));

@@ -10,6 +10,10 @@ import android.hardware.security.keymint.KeyParameter;
 import android.hardware.security.keymint.KeyParameterValue;
 import android.hardware.security.keymint.Tag;
 import android.os.Binder;
+import android.os.Parcel;
+import android.os.ServiceManager;
+import android.security.keybox.IKeyboxManager;
+import android.security.keybox.KeyboxSignResult;
 import android.system.keystore2.Authorization;
 import android.system.keystore2.IKeystoreSecurityLevel;
 import android.system.keystore2.KeyDescriptor;
@@ -19,7 +23,6 @@ import android.util.Log;
 
 import com.android.internal.util.custom.KeyboxChainGenerator.KeyGenParameters;
 
-import java.security.cert.Certificate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
@@ -34,11 +37,30 @@ public class KeyboxImitationHooks {
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
     private static boolean mSuccess = false;
 
-    public static KeyEntryResponse onGetKeyEntry(KeyDescriptor descriptor) {
-        if (!KeyProviderManager.isKeyboxAvailable()) {
-            return null;
-        }
+    private static final String SERVICE_NAME = "keybox_attestation";
+    private static volatile IKeyboxManager mService;
 
+    private static IKeyboxManager getService() {
+        IKeyboxManager service = mService;
+        if (service != null && service.asBinder().isBinderAlive()) {
+            return service;
+        }
+        service = IKeyboxManager.Stub.asInterface(ServiceManager.getService(SERVICE_NAME));
+        mService = service;
+        return service;
+    }
+
+    /** Whether the system_server keybox service holds a usable keybox. */
+    public static boolean isKeyboxActive() {
+        try {
+            IKeyboxManager service = getService();
+            return service != null && service.isKeyboxActive();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public static KeyEntryResponse onGetKeyEntry(KeyDescriptor descriptor) {
         if (!mSuccess) {
             return null;
         }
@@ -53,10 +75,6 @@ public class KeyboxImitationHooks {
     }
 
     public static KeyMetadata generateKey(IKeystoreSecurityLevel level, KeyDescriptor descriptor, Collection<KeyParameter> args) {
-        if (!KeyProviderManager.isKeyboxAvailable()) {
-            return null;
-        }
-
         KeyGenParameters params = new KeyGenParameters(args.toArray(new KeyParameter[args.size()]));
 
         if (params.attestationChallenge == null) {
@@ -69,9 +87,16 @@ public class KeyboxImitationHooks {
         }
 
         int uid = Binder.getCallingUid();
+        IKeyboxManager service = getService();
+        if (service == null) {
+            return null;
+        }
+        Parcel parcel = Parcel.obtain();
         try {
-            List<Certificate> chain = KeyboxChainGenerator.generateCertChain(uid, descriptor, params);
-            if (chain == null || chain.isEmpty()) {
+            parcel.writeTypedArray(args.toArray(new KeyParameter[args.size()]), 0);
+            // The service takes the caller uid from Binder and only signs for targeted apps
+            KeyboxSignResult chain = service.signAttestedKey(descriptor.alias, parcel.marshall());
+            if (chain == null || chain.certificate == null) {
                 return null;
             }
             KeyEntryResponse response = buildResponse(level, chain, params, descriptor);
@@ -84,12 +109,14 @@ public class KeyboxImitationHooks {
         } catch (Exception e) {
             Log.e(TAG, "Failed to generate key", e);
             return null;
+        } finally {
+            parcel.recycle();
         }
     }
 
     private static KeyEntryResponse buildResponse(
             IKeystoreSecurityLevel level,
-            List<Certificate> chain,
+            KeyboxSignResult chain,
             KeyGenParameters params,
             KeyDescriptor descriptor
     ) {
@@ -98,7 +125,8 @@ public class KeyboxImitationHooks {
             KeyMetadata metadata = new KeyMetadata();
             metadata.keySecurityLevel = params.securityLevel;
 
-            KeyboxUtils.putCertificateChain(metadata, chain.toArray(new Certificate[chain.size()]));
+            metadata.certificate = chain.certificate;
+            metadata.certificateChain = chain.certificateChain;
 
             KeyDescriptor d = new KeyDescriptor();
             d.domain = descriptor.domain;
