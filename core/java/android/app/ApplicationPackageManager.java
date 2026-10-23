@@ -2727,6 +2727,8 @@ public class ApplicationPackageManager extends PackageManager {
      */
     private static final String PLAY_STORE_PACKAGE = "com.android.vending";
     private static final String PLAY_INSTALLER_APPS = "lenovo_play_installer_apps";
+    // Main switch of the feature: on unless 0.
+    private static final String PLAY_INSTALLER_SWITCH = "lenovo_installer_spoof";
 
     private boolean reportPlayInstaller(String packageName, String installer) {
         if (packageName == null || PLAY_STORE_PACKAGE.equals(installer)
@@ -2735,6 +2737,10 @@ public class ApplicationPackageManager extends PackageManager {
         }
         final String apps;
         try {
+            if (Settings.Global.getInt(mContext.getContentResolver(), PLAY_INSTALLER_SWITCH, 1)
+                    == 0) {
+                return false;
+            }
             apps = Settings.Global.getString(mContext.getContentResolver(),
                     PLAY_INSTALLER_APPS);
         } catch (RuntimeException e) {
