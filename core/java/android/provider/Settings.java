@@ -13970,10 +13970,10 @@ public final class Settings {
         public static final String FETCHED_PIF = "fetched_pif";
 
         /**
-         * User selectable keybox data.
+         * User selectable keybox data. It holds the private keys, so only system
+         * apps can read it.
          * @hide
          */
-        @Readable
         public static final String KEYBOX_DATA = "keybox_data";
 
         /**

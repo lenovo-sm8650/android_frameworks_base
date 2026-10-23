@@ -4,57 +4,81 @@
  */
 package com.android.internal.util.custom;
 
-import android.app.ActivityThread;
-import android.content.Context;
-import android.provider.Settings;
 import android.util.Log;
 import android.util.Xml;
 
-import com.android.internal.R;
 import org.xmlpull.v1.XmlPullParser;
 
 import java.io.StringReader;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Manager class for handling keybox providers.
+ * Keybox holder. The keybox is only ever loaded inside system_server
+ * (KeyboxAttestationService); in any other process the provider is empty and
+ * availability is answered by the service.
  * @hide
  */
 public final class KeyProviderManager {
     private static final String TAG = "KeyProviderManager";
 
+    private static volatile IKeyboxProvider sProvider;
+
     private KeyProviderManager() {}
 
     public static IKeyboxProvider getProvider() {
-        return new DefaultKeyboxProvider();
+        IKeyboxProvider provider = sProvider;
+        return provider != null ? provider : new DefaultKeyboxProvider(new HashMap<>());
     }
 
     public static boolean isKeyboxAvailable() {
-        return getProvider().hasKeybox();
+        IKeyboxProvider provider = sProvider;
+        if (provider != null) {
+            return provider.hasKeybox();
+        }
+        return KeyboxImitationHooks.isKeyboxActive();
+    }
+
+    /**
+     * Parses and validates keybox XML without loading it.
+     * @throws IllegalArgumentException if the XML is not a complete keybox
+     */
+    public static IKeyboxProvider parseXml(String xml) {
+        DefaultKeyboxProvider provider = new DefaultKeyboxProvider(new HashMap<>());
+        if (!provider.loadXml(xml) || !provider.hasKeybox()) {
+            throw new IllegalArgumentException("Invalid keybox XML");
+        }
+        return provider;
+    }
+
+    /** system_server only: builds a provider from "KEY:value" config entries. */
+    public static IKeyboxProvider fromConfigArray(String[] entries) {
+        Map<String, String> data = new HashMap<>();
+        for (String entry : entries) {
+            String[] parts = entry.split(":", 2);
+            if (parts.length == 2) {
+                data.put(parts[0], parts[1]);
+            }
+        }
+        return new DefaultKeyboxProvider(data);
+    }
+
+    /** system_server only: installs the active keybox (null clears it). */
+    public static void setProvider(IKeyboxProvider provider) {
+        sProvider = provider;
     }
 
     private static class DefaultKeyboxProvider implements IKeyboxProvider {
-        private final Map<String, String> keyboxData = new HashMap<>();
+        private final Map<String, String> keyboxData;
 
-        private DefaultKeyboxProvider() {
-            Context context = getApplicationContext();
-            if (context == null) {
-                Log.e(TAG, "Failed to get application context");
-                return;
-            }
-
-            if (!loadFromXmlSetting(context)) {
-                loadFromConfigArray(context);
-            }
+        private DefaultKeyboxProvider(Map<String, String> data) {
+            keyboxData = data;
         }
 
-        private boolean loadFromXmlSetting(Context ctx) {
+        private boolean loadXml(String xml) {
             try {
-                String xml = Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.KEYBOX_DATA);
                 if (xml == null || xml.trim().isEmpty()) return false;
 
                 XmlPullParser p = Xml.newPullParser();
@@ -126,38 +150,10 @@ public final class KeyProviderManager {
                     return false;
                 }
 
-                if (!hasKeybox()) {
-                    Log.w(TAG, "Failed to load keybox from XML setting");
-                    return false;
-                }
-
-                Log.i(TAG, "Loaded keybox from XML setting");
-                return true;
+                return hasKeybox();
             } catch (Exception e) {
                 Log.e(TAG, "XML keybox load failed", e);
                 return false;
-            }
-        }
-
-        private void loadFromConfigArray(Context ctx) {
-            for (String entry : ctx.getResources().getStringArray(R.array.config_certifiedKeybox)) {
-                String[] parts = entry.split(":", 2);
-                if (parts.length == 2) {
-                    keyboxData.put(parts[0], parts[1]);
-                }
-            }
-
-            if (!hasKeybox()) {
-                Log.w(TAG, "Incomplete keybox provided by overlays");
-            }
-        }
-
-        private static Context getApplicationContext() {
-            try {
-                return ActivityThread.currentApplication().getApplicationContext();
-            } catch (Exception e) {
-                Log.e(TAG, "Error getting application context", e);
-                return null;
             }
         }
 
@@ -193,15 +189,11 @@ public final class KeyProviderManager {
         }
 
         private String[] getCertificateChain(String prefix) {
-            List<String> dataList = new ArrayList<>();
-            for (String key : keyboxData.keySet()) {
-                if (key.startsWith(prefix + ".CERT_")) {
-                    dataList.add(keyboxData.get(key));
-                }
+            List<String> chain = new ArrayList<>();
+            for (int i = 1; keyboxData.containsKey(prefix + ".CERT_" + i); i++) {
+                chain.add(keyboxData.get(prefix + ".CERT_" + i));
             }
-            String[] chain = dataList.toArray(String[]::new);
-            Arrays.sort(chain);
-            return chain;
+            return chain.toArray(String[]::new);
         }
     }
 }
