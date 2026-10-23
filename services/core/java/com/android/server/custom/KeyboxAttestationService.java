@@ -57,8 +57,6 @@ public final class KeyboxAttestationService extends SystemService {
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     private static final String SERVICE_NAME = "keybox_attestation";
-    // Keybox file of earlier builds, moved to Settings.Secure keybox_data at boot
-    private static final String LEGACY_KEYBOX_FILE = "keybox.xml";
     private static final String CONFIG_FILE = "config.json";
     private static final String[] DEFAULT_TARGETS = {
         "com.google.android.gms", "com.android.vending"
@@ -99,7 +97,6 @@ public final class KeyboxAttestationService extends SystemService {
         if (phase == PHASE_ACTIVITY_MANAGER_READY) {
             // The keybox is Settings.Secure keybox_data, as the developer-options preference
             // writes it; reload it whenever it changes.
-            migrateLegacyKeybox();
             synchronized (mLock) {
                 reloadKeyboxLocked();
             }
@@ -121,29 +118,6 @@ public final class KeyboxAttestationService extends SystemService {
             Log.e(TAG, "Failed to create " + mDir);
         }
         FileUtils.setPermissions(mDir.getAbsolutePath(), 0700, Process.myUid(), Process.myUid());
-    }
-
-    /** Moves the keybox file of earlier builds to Settings.Secure keybox_data. */
-    private void migrateLegacyKeybox() {
-        AtomicFile file = new AtomicFile(new File(mDir, LEGACY_KEYBOX_FILE));
-        if (!file.exists()) {
-            return;
-        }
-        try {
-            String stored = Settings.Secure.getStringForUser(mContext.getContentResolver(),
-                    Settings.Secure.KEYBOX_DATA, UserHandle.USER_SYSTEM);
-            if (stored == null || stored.trim().isEmpty()) {
-                Settings.Secure.putStringForUser(mContext.getContentResolver(),
-                        Settings.Secure.KEYBOX_DATA,
-                        new String(file.readFully(), StandardCharsets.UTF_8),
-                        UserHandle.USER_SYSTEM);
-                Log.i(TAG, "Moved the keybox to Settings.Secure");
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Keybox migration failed", e);
-            return;
-        }
-        file.delete();
     }
 
     // ---- persistence ----
