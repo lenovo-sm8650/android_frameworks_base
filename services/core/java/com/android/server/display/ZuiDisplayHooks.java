@@ -32,8 +32,9 @@ import java.util.function.IntConsumer;
  */
 public final class ZuiDisplayHooks {
     /**
-     * Ratio of the nits of the backlight to the nits of the brightness, stock
-     * DisplayPowerController.updatePowerStateInternal (getHdrBrightnessFromSdr(brightness, 2.0f)).
+     * Ratio of the nits of the backlight to the nits of the brightness while Dolby Vision plays,
+     * stock DisplayPowerController.updatePowerStateInternal (getHdrBrightnessFromSdr(brightness,
+     * 2.0f) with mDolbyVisionStatus or mCameraDolbyVisionStatus).
      */
     static final float BACKLIGHT_NITS_RATIO = 2.0f;
 

@@ -367,6 +367,11 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
     private static final int MSG_ZUI_END_FAST_CHANGE = 104;
     private boolean mZuiAutoBrightness;
     private float mZuiBrightnessMinimum;
+    // Stock mDolbyVisionStatus / mCameraDolbyVisionStatus: Settings.System dolby_vision_status
+    // and camera_dolby_vision_status, written by DolbyVisionService while Dolby Vision plays
+    private static final String ZUI_DOLBY_VISION_STATUS = "dolby_vision_status";
+    private static final String ZUI_CAMERA_DOLBY_VISION_STATUS = "camera_dolby_vision_status";
+    private boolean mZuiDolbyVision;
     // true for two seconds after the switch to automatic brightness: no slow ramps
     private boolean mEnabledFastChangeForBrightness;
     private float mAutoBrightnessAdjustmentFloat;
@@ -1029,6 +1034,15 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
         mContext.getContentResolver().registerContentObserver(
                 Settings.System.getUriFor(Settings.System.AUTO_BRIGHTNESS_ONE_SHOT),
                 false /*notifyForDescendants*/, mSettingsObserver, UserHandle.USER_ALL);
+        if (ZuiDisplayHooks.isAutoBrightness()) {
+            mContext.getContentResolver().registerContentObserver(
+                    Settings.System.getUriFor(ZUI_DOLBY_VISION_STATUS),
+                    false /*notifyForDescendants*/, mSettingsObserver, UserHandle.USER_ALL);
+            mContext.getContentResolver().registerContentObserver(
+                    Settings.System.getUriFor(ZUI_CAMERA_DOLBY_VISION_STATUS),
+                    false /*notifyForDescendants*/, mSettingsObserver, UserHandle.USER_ALL);
+            mZuiDolbyVision = readZuiDolbyVision();
+        }
         handleBrightnessModeChange();
     }
 
@@ -1580,9 +1594,11 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
                 mBrightnessReasonTemp.addModifier(BrightnessReason.MODIFIER_HDR);
             }
 
-            if (mZuiAutoBrightness) {
-                // ZUI: the backlight (and the SDR level) gets twice the nits of the brightness,
-                // up to the maximum of the panel (stock getHdrBrightnessFromSdr(brightness, 2.0f)).
+            if (mZuiAutoBrightness && mZuiDolbyVision) {
+                // ZUI: while Dolby Vision plays, the backlight (and the SDR level) gets twice the
+                // nits of the brightness, up to the maximum of the panel (stock
+                // getHdrBrightnessFromSdr(brightness, 2.0f), only with mDolbyVisionStatus or
+                // mCameraDolbyVisionStatus). Otherwise the brightness is used as it is.
                 sdrAnimateValue = mDisplayDeviceConfig.getHdrBrightnessFromSdr(hdrBrightness,
                         ZuiDisplayHooks.BACKLIGHT_NITS_RATIO);
                 animateValue = sdrAnimateValue;
@@ -2473,8 +2489,17 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
         if (mZuiAutoBrightness) {
             mAutoBrightnessAdjustmentFloat = Settings.System.getFloat(mContext.getContentResolver(),
                     Settings.System.SCREEN_AUTO_BRIGHTNESS_ADJ, 0.0f);
+            mZuiDolbyVision = readZuiDolbyVision();
         }
         sendUpdatePowerState();
+    }
+
+    /** Whether Dolby Vision video or the Dolby Vision camera is on (stock ZUI). */
+    private boolean readZuiDolbyVision() {
+        return Settings.System.getInt(mContext.getContentResolver(), ZUI_DOLBY_VISION_STATUS, 0)
+                != 0
+                || Settings.System.getInt(mContext.getContentResolver(),
+                        ZUI_CAMERA_DOLBY_VISION_STATUS, 0) != 0;
     }
 
     private void handleBrightnessModeChange() {
