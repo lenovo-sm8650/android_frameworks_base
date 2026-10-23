@@ -155,6 +155,8 @@ public class PropImitationHooks {
     // Manufacturer,Model}). Empty fields keep the real value. The defaults are
     // empty, so a build without an overlay changes nothing.
     private static final String DEVICE_SPOOF_APPS = "lenovo_device_spoof_apps";
+    // Main switch of the feature: on unless 0.
+    private static final String DEVICE_SPOOF_SWITCH = "lenovo_device_spoof";
 
     /** Applies the device identity if the app is selected; true if anything changed. */
     private static boolean setDeviceSpoofProps(Context context, Resources res, String packageName) {
@@ -162,6 +164,9 @@ public class PropImitationHooks {
             return false;
         }
         try {
+            if (Settings.Global.getInt(context.getContentResolver(), DEVICE_SPOOF_SWITCH, 1) == 0) {
+                return false;
+            }
             final String apps = Settings.Global.getString(context.getContentResolver(),
                     DEVICE_SPOOF_APPS);
             final String[] entries = apps != null ? apps.split(";")
