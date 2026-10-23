@@ -57,7 +57,8 @@ public final class KeyboxAttestationService extends SystemService {
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     private static final String SERVICE_NAME = "keybox_attestation";
-    private static final String KEYBOX_FILE = "keybox.xml";
+    // Keybox file of earlier builds, moved to Settings.Secure keybox_data at boot
+    private static final String LEGACY_KEYBOX_FILE = "keybox.xml";
     private static final String CONFIG_FILE = "config.json";
     private static final String[] DEFAULT_TARGETS = {
         "com.google.android.gms", "com.android.vending"
@@ -89,7 +90,6 @@ public final class KeyboxAttestationService extends SystemService {
         ensureDir();
         synchronized (mLock) {
             loadConfigLocked();
-            reloadKeyboxLocked();
         }
         publishBinderService(SERVICE_NAME, mBinder);
     }
@@ -97,15 +97,20 @@ public final class KeyboxAttestationService extends SystemService {
     @Override
     public void onBootPhase(int phase) {
         if (phase == PHASE_ACTIVITY_MANAGER_READY) {
-            // Settings provider is available: migrate (and keep migrating, the stock
-            // developer-options preference still writes it) Settings.Secure keybox_data.
-            migrateSettingsKeybox();
+            // The keybox is Settings.Secure keybox_data, as the developer-options preference
+            // writes it; reload it whenever it changes.
+            migrateLegacyKeybox();
+            synchronized (mLock) {
+                reloadKeyboxLocked();
+            }
             Uri uri = Settings.Secure.getUriFor(Settings.Secure.KEYBOX_DATA);
             mContext.getContentResolver().registerContentObserver(uri, false,
                     new ContentObserver(new Handler(Looper.getMainLooper())) {
                         @Override
                         public void onChange(boolean selfChange) {
-                            migrateSettingsKeybox();
+                            synchronized (mLock) {
+                                reloadKeyboxLocked();
+                            }
                         }
                     }, UserHandle.USER_SYSTEM);
         }
@@ -118,26 +123,27 @@ public final class KeyboxAttestationService extends SystemService {
         FileUtils.setPermissions(mDir.getAbsolutePath(), 0700, Process.myUid(), Process.myUid());
     }
 
-    private void migrateSettingsKeybox() {
-        try {
-            String xml = Settings.Secure.getStringForUser(mContext.getContentResolver(),
-                    Settings.Secure.KEYBOX_DATA, UserHandle.USER_SYSTEM);
-            if (xml == null || xml.trim().isEmpty()) {
-                return;
-            }
-            try {
-                synchronized (mLock) {
-                    setKeyboxLocked(xml);
-                }
-                Log.i(TAG, "Migrated keybox from Settings.Secure");
-            } catch (IllegalArgumentException | java.io.IOException e) {
-                Log.w(TAG, "Ignoring invalid Settings.Secure keybox_data", e);
-            }
-            Settings.Secure.putStringForUser(mContext.getContentResolver(),
-                    Settings.Secure.KEYBOX_DATA, "", UserHandle.USER_SYSTEM);
-        } catch (Exception e) {
-            Log.e(TAG, "Keybox settings migration failed", e);
+    /** Moves the keybox file of earlier builds to Settings.Secure keybox_data. */
+    private void migrateLegacyKeybox() {
+        AtomicFile file = new AtomicFile(new File(mDir, LEGACY_KEYBOX_FILE));
+        if (!file.exists()) {
+            return;
         }
+        try {
+            String stored = Settings.Secure.getStringForUser(mContext.getContentResolver(),
+                    Settings.Secure.KEYBOX_DATA, UserHandle.USER_SYSTEM);
+            if (stored == null || stored.trim().isEmpty()) {
+                Settings.Secure.putStringForUser(mContext.getContentResolver(),
+                        Settings.Secure.KEYBOX_DATA,
+                        new String(file.readFully(), StandardCharsets.UTF_8),
+                        UserHandle.USER_SYSTEM);
+                Log.i(TAG, "Moved the keybox to Settings.Secure");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Keybox migration failed", e);
+            return;
+        }
+        file.delete();
     }
 
     // ---- persistence ----
@@ -188,12 +194,12 @@ public final class KeyboxAttestationService extends SystemService {
         }
     }
 
-    /** Stored keybox XML wins; otherwise the built-in config_certifiedKeybox default. */
+    /** Settings.Secure keybox_data wins; otherwise the built-in config_certifiedKeybox default. */
     private void reloadKeyboxLocked() {
-        File file = new File(mDir, KEYBOX_FILE);
-        if (file.exists()) {
+        String xml = Settings.Secure.getStringForUser(mContext.getContentResolver(),
+                Settings.Secure.KEYBOX_DATA, UserHandle.USER_SYSTEM);
+        if (xml != null && !xml.trim().isEmpty()) {
             try {
-                String xml = new String(new AtomicFile(file).readFully(), StandardCharsets.UTF_8);
                 KeyProviderManager.setProvider(KeyProviderManager.parseXml(xml));
                 return;
             } catch (Exception e) {
@@ -216,17 +222,10 @@ public final class KeyboxAttestationService extends SystemService {
         } catch (Exception e) {
             throw new IllegalArgumentException("Invalid keybox key/certificate: " + e.getMessage());
         }
-        File file = new File(mDir, KEYBOX_FILE);
-        AtomicFile atomic = new AtomicFile(file);
-        FileOutputStream out = atomic.startWrite();
-        try {
-            out.write(xml.getBytes(StandardCharsets.UTF_8));
-            atomic.finishWrite(out);
-        } catch (java.io.IOException e) {
-            atomic.failWrite(out);
-            throw e;
+        if (!Settings.Secure.putStringForUser(mContext.getContentResolver(),
+                Settings.Secure.KEYBOX_DATA, xml, UserHandle.USER_SYSTEM)) {
+            throw new java.io.IOException("Failed to store keybox_data");
         }
-        FileUtils.setPermissions(file.getAbsolutePath(), 0600, Process.myUid(), Process.myUid());
         KeyProviderManager.setProvider(provider);
     }
 
@@ -444,9 +443,15 @@ public final class KeyboxAttestationService extends SystemService {
         @Override
         public void clearKeybox() {
             enforceCaller();
-            synchronized (mLock) {
-                new File(mDir, KEYBOX_FILE).delete();
-                reloadKeyboxLocked();
+            long token = Binder.clearCallingIdentity();
+            try {
+                synchronized (mLock) {
+                    Settings.Secure.putStringForUser(mContext.getContentResolver(),
+                            Settings.Secure.KEYBOX_DATA, null, UserHandle.USER_SYSTEM);
+                    reloadKeyboxLocked();
+                }
+            } finally {
+                Binder.restoreCallingIdentity(token);
             }
         }
 

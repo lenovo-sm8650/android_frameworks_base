@@ -2500,6 +2500,10 @@ public class SettingsProvider extends ContentProvider {
          * app-compat.
          */
         switch (settingName) {
+            // The keybox holds private keys: system apps only (returned above)
+            case Secure.KEYBOX_DATA -> throw new SecurityException(
+                    "Settings key: <" + settingName + "> is only readable by system apps");
+
             // missing READ_PRIVILEGED_PHONE_STATE permission protection
             // see alternative API {@link SubscriptionManager#getPreferredDataSubscriptionId()
             case Global.MULTI_SIM_DATA_CALL_SUBSCRIPTION -> {
