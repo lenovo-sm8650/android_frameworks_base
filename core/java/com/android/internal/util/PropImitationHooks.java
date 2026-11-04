@@ -149,14 +149,14 @@ public class PropImitationHooks {
     }
 
     // Device identity shown to selected apps, from Experimental features:
-    // Settings.Global lenovo_device_spoof_apps = "pkg=brand|manufacturer|model;...".
+    // Settings.Global device_spoof_apps = "pkg=brand|manufacturer|model;...".
     // While the key is unset, config_deviceSpoofApps applies (same
     // entries; a bare package name uses config_deviceSpoof{Brand,
     // Manufacturer,Model}). Empty fields keep the real value. The defaults are
     // empty, so a build without an overlay changes nothing.
-    private static final String DEVICE_SPOOF_APPS = "lenovo_device_spoof_apps";
+    private static final String DEVICE_SPOOF_APPS = "device_spoof_apps";
     // Main switch of the feature: on unless 0.
-    private static final String DEVICE_SPOOF_SWITCH = "lenovo_device_spoof";
+    private static final String DEVICE_SPOOF_SWITCH = "device_spoof";
 
     /** Applies the device identity if the app is selected; true if anything changed. */
     private static boolean setDeviceSpoofProps(Context context, Resources res, String packageName) {
@@ -202,7 +202,7 @@ public class PropImitationHooks {
 
     // The optional GPL module exclusively owns GMS/Play Store spoofing while selected.
     // Failure must not fall back to legacy props or key-attestation blocking.
-    private static final String PIF_MODULE_SETTING = "lenovo_pif_module";
+    private static final String PIF_MODULE_SETTING = "pif_module";
     private static final String PIF_MODULE_JAR =
             "/system_ext/framework/PlayIntegrityFixEntry.jar";
     private static final String PIF_MODULE_CLASS = "es.chiteroman.playintegrityfix.RomEntry";

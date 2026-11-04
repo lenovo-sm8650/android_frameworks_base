@@ -61,11 +61,11 @@ public final class KeyboxAttestationService extends SystemService {
     private static final String[] DEFAULT_TARGETS = {
         "com.google.android.gms", "com.android.vending"
     };
-    private static final String PIF_CONFIG_SETTING = "lenovo_pif_module_config";
+    private static final String PIF_CONFIG_SETTING = "pif_module_config";
     private static final String PIF_DEFAULT_PROP = "/system_ext/etc/PlayIntegrityFix/pif.prop";
     private static final Pattern PATCH_PATTERN = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
 
-    private static final String TEE_SWITCH_SETTING = "lenovo_tee_simulator";
+    private static final String TEE_SWITCH_SETTING = "tee_simulator";
 
     private final Context mContext;
     private final Object mLock = new Object();
@@ -214,7 +214,7 @@ public final class KeyboxAttestationService extends SystemService {
                 "KeyboxAttestationService");
     }
 
-    /** Settings.Global lenovo_tee_simulator: unset or 1 = on, only 0 turns the simulation off. */
+    /** Settings.Global tee_simulator: unset or 1 = on, only 0 turns the simulation off. */
     private boolean isTeeEnabled() {
         return Settings.Global.getInt(mContext.getContentResolver(), TEE_SWITCH_SETTING, 1) != 0;
     }
