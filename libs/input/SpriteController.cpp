@@ -349,7 +349,12 @@ sp<SurfaceControl> SpriteController::obtainSurface(int32_t width, int32_t height
         LOG(ERROR) << "Failed to get the parent surface for pointers on display " << displayId;
     }
 
-    int32_t createFlags = ISurfaceComposerClient::eHidden | ISurfaceComposerClient::eCursorWindow;
+    // Do not use eCursorWindow here: when the pointer sprite is promoted to a
+    // hardware cursor plane on panels whose scanout requires rotation (e.g.
+    // portrait-native panels in landscape), the DPU cannot sustain the full
+    // refresh rate and throttles the entire display to half rate (one frame per
+    // two vsyncs). Composing it as a regular overlay avoids the throttling.
+    int32_t createFlags = ISurfaceComposerClient::eHidden;
     if (hideOnMirrored) {
         createFlags |= ISurfaceComposerClient::eSkipScreenshot;
     }
@@ -364,6 +369,7 @@ sp<SurfaceControl> SpriteController::obtainSurface(int32_t width, int32_t height
 
     const status_t status =
             SurfaceComposerClient::Transaction()
+                    .setTrustedOverlay(surfaceControl, true)
                     .setCompositionFilterFlag(surfaceControl,
                                               static_cast<uint32_t>(gui::CompositionFilterFlag::
                                                                             FLAG_MOUSE_CURSOR))
