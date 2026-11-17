@@ -186,4 +186,14 @@
          PenService with getIdentifier); devices overlay the list. -->
     <string-array name="config_stylus_pen_haptic_packages" translatable="false">
     </string-array>
+
+    <!-- Device identity shown to selected apps (DeviceSpoofUtils): entries
+         "package=brand|manufacturer|model", or a bare package name for the three values
+         below. Used while Settings.Global device_spoof_apps is unset; empty fields keep
+         the real value. -->
+    <string-array name="config_deviceSpoofApps" translatable="false">
+    </string-array>
+    <string name="config_deviceSpoofBrand" translatable="false"></string>
+    <string name="config_deviceSpoofManufacturer" translatable="false"></string>
+    <string name="config_deviceSpoofModel" translatable="false"></string>
 </resources>

@@ -145,4 +145,10 @@
 
    <!-- Lenovo pen writing haptics -->
    <java-symbol type="array" name="config_stylus_pen_haptic_packages" />
+
+   <!-- Device identity for selected apps -->
+   <java-symbol type="array" name="config_deviceSpoofApps" />
+   <java-symbol type="string" name="config_deviceSpoofBrand" />
+   <java-symbol type="string" name="config_deviceSpoofManufacturer" />
+   <java-symbol type="string" name="config_deviceSpoofModel" />
 </resources>
