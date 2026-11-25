@@ -64,6 +64,11 @@ public class SpoofManager {
     private static final String ACTIVATED_KEY = "spoof_activated";
     private static final String SETTINGS_PACKAGE = "com.android.settings";
 
+    // The Play Integrity Fix and TrickyStore switches of the Settings page
+    // (Settings.System, on unless 0). Off hands out no config to that side.
+    private static final String PIF_ENABLED_KEY = "spoof_pif_enabled";
+    private static final String TRICKYSTORE_ENABLED_KEY = "spoof_trickystore_enabled";
+
     private static final String GMS_PACKAGE = "com.google.android.gms";
     private static final String VENDING_PACKAGE = "com.android.vending";
     private static final String[] GMS_FAMILY = {
@@ -118,6 +123,8 @@ public class SpoofManager {
     // the config getters below return null and GMS is left alone. Set once by
     // enableSpoofing() and persisted in ACTIVATED_KEY.
     private volatile boolean mActivated;
+    private volatile boolean mPifEnabled = true;
+    private volatile boolean mTrickyStoreEnabled = true;
     private TaskStackListener mTaskListener;
 
     private final Map<String, String> mCache = new ConcurrentHashMap<>();
@@ -128,6 +135,7 @@ public class SpoofManager {
     private final Context mContext;
     private ContentResolver mResolver;
     private ContentObserver mObserver;
+    private ContentObserver mSwitchObserver;
     private volatile boolean mReady = false;
 
     public SpoofManager(Context context) {
@@ -162,11 +170,28 @@ public class SpoofManager {
                     Settings.Secure.getUriFor(key), false, mObserver, UserHandle.USER_ALL);
         }
 
+        mPifEnabled = readSwitch(PIF_ENABLED_KEY);
+        mTrickyStoreEnabled = readSwitch(TRICKYSTORE_ENABLED_KEY);
+        mSwitchObserver = new ContentObserver(mHandler) {
+            @Override
+            public void onChange(boolean selfChange, Uri uri) {
+                onSwitchChanged();
+            }
+        };
+        mResolver.registerContentObserver(Settings.System.getUriFor(PIF_ENABLED_KEY),
+                false, mSwitchObserver, UserHandle.USER_ALL);
+        mResolver.registerContentObserver(Settings.System.getUriFor(TRICKYSTORE_ENABLED_KEY),
+                false, mSwitchObserver, UserHandle.USER_ALL);
+
         mActivated = Settings.Secure.getIntForUser(
                 mResolver, ACTIVATED_KEY, 0, UserHandle.USER_SYSTEM) != 0;
         if (mActivated) {
             seedDefaultTargetsIfUnset();
-            stagePifPropOverrides(getCached(Settings.Secure.SPOOF_PIF_CONFIG));
+            if (mPifEnabled) {
+                stagePifPropOverrides(getCached(Settings.Secure.SPOOF_PIF_CONFIG));
+            } else {
+                clearPifPropOverrides();
+            }
         } else {
             Log.i(TAG, "Spoofing off until Settings is opened for the first time");
             registerSettingsWatcher();
@@ -245,7 +270,42 @@ public class SpoofManager {
         PlayIntegritySpoofService.getInstance().loadConfig();
         TrickyStoreService.getInstance().initialize();
         seedDefaultTargetsIfUnset();
-        stagePifPropOverrides(getCached(Settings.Secure.SPOOF_PIF_CONFIG));
+        if (mPifEnabled) stagePifPropOverrides(getCached(Settings.Secure.SPOOF_PIF_CONFIG));
+        killGmsFamily();
+    }
+
+    private boolean readSwitch(String key) {
+        return Settings.System.getIntForUser(mResolver, key, 1, UserHandle.USER_SYSTEM) != 0;
+    }
+
+    /**
+     * Called after one of the two switches changes. Turning Play Integrity Fix off
+     * drops the staged PIF props, turning it on stages the config again; the PIF and
+     * TrickyStore instances of system_server reload (the getters now answer null for
+     * a side that is off) and the GMS family restarts so it picks up the change.
+     */
+    private void onSwitchChanged() {
+        final boolean pif = readSwitch(PIF_ENABLED_KEY);
+        final boolean tricky = readSwitch(TRICKYSTORE_ENABLED_KEY);
+        final boolean pifChanged = pif != mPifEnabled;
+        final boolean trickyChanged = tricky != mTrickyStoreEnabled;
+        mPifEnabled = pif;
+        mTrickyStoreEnabled = tricky;
+        if (!pifChanged && !trickyChanged) return;
+        Log.i(TAG, "Spoofing switches: pif=" + pif + " trickystore=" + tricky);
+        if (!mActivated) return;
+
+        if (pifChanged) {
+            if (pif) {
+                stagePifPropOverrides(getCached(Settings.Secure.SPOOF_PIF_CONFIG));
+            } else {
+                clearPifPropOverrides();
+            }
+            PlayIntegritySpoofService.getInstance().loadConfig();
+        }
+        if (trickyChanged) {
+            TrickyStoreService.getInstance().initialize();
+        }
         killGmsFamily();
     }
 
@@ -286,7 +346,7 @@ public class SpoofManager {
     private void onPifConfigChanged() {
         final String config = getCached(Settings.Secure.SPOOF_PIF_CONFIG);
         if (config != null && !config.trim().isEmpty()) {
-            if (mActivated) stagePifPropOverrides(config);
+            if (mActivated && mPifEnabled) stagePifPropOverrides(config);
             return;
         }
 
@@ -839,7 +899,7 @@ public class SpoofManager {
     }
 
     public String getPifConfig(int callingUid) {
-        if (!mActivated || !isPifCaller(callingUid)) {
+        if (!mActivated || !mPifEnabled || !isPifCaller(callingUid)) {
             return null;
         }
         return getCached(Settings.Secure.SPOOF_PIF_CONFIG);
@@ -883,6 +943,9 @@ public class SpoofManager {
     }
 
     private boolean isTrickyStoreCaller(int callingUid) {
+        if (!mTrickyStoreEnabled) {
+            return false;
+        }
         if (UserHandle.getAppId(callingUid) == Process.SYSTEM_UID) {
             return true;
         }
