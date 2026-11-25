@@ -283,7 +283,15 @@ public class KeyStore2 {
             throws KeyStoreException {
         StrictMode.noteDiskRead();
 
-        return handleRemoteExceptionWithRetry((service) -> service.getKeyEntry(descriptor));
+        final KeyEntryResponse response =
+                handleRemoteExceptionWithRetry((service) -> service.getKeyEntry(descriptor));
+        if (response != null) {
+            // Keys attested through TrickyStore's software path report the origin
+            // their certificate states
+            android.security.trickystore.TrickyStoreService
+                    .reportAttestedKeyAsGenerated(response.metadata);
+        }
+        return response;
     }
 
     /**

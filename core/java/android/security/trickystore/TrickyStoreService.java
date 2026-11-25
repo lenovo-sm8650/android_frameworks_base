@@ -17,11 +17,16 @@ package android.security.trickystore;
 
 import android.app.ActivityManager;
 import android.app.IActivityManager;
+import android.hardware.security.keymint.KeyOrigin;
+import android.hardware.security.keymint.KeyParameterValue;
+import android.hardware.security.keymint.Tag;
 import android.os.Binder;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
+import android.system.keystore2.Authorization;
+import android.system.keystore2.KeyMetadata;
 import android.util.JsonReader;
 import android.util.Log;
 
@@ -355,15 +360,12 @@ public class TrickyStoreService {
     private boolean isValidKeyboxXml(String xml) {
         boolean hasEcdsa = xml.contains("<Key algorithm=\"ecdsa\">");
         boolean hasRsa = xml.contains("<Key algorithm=\"rsa\">");
-        boolean hasId = xml.contains("<serial>") || xml.contains("DeviceID");
         if (!hasEcdsa && !hasRsa) {
             Log.e(TAG, "Keybox validation failed: no ECDSA or RSA key block found");
             return false;
         }
-        if (!hasId) {
-            Log.e(TAG, "Keybox validation failed: no identifier field (serial/DeviceID)");
-            return false;
-        }
+        // The DeviceID attribute or <serial> only names the keybox. Factory keyboxes
+        // and TrickyStore take a <Keybox> without one; the certificates identify it.
         if (!hasEcdsa) Log.w(TAG, "Keybox warning: missing ECDSA key block");
         if (!hasRsa)   Log.w(TAG, "Keybox warning: missing RSA key block");
         return true;
@@ -822,6 +824,89 @@ public class TrickyStoreService {
     public boolean hasKeyboxes() {
         maybeRefreshKeyBox();
         return mKeyBoxManager.hasKeyboxes();
+    }
+
+    /**
+     * A key attested through the software path is generated here and imported into
+     * KeyMint, so KeyMint records its origin as IMPORTED while its certificate, signed by
+     * the keybox, says GENERATED. A key a real TEE generated never looks like that, and
+     * the owning app can read the origin (KeyInfo), so report such a key as GENERATED,
+     * like the certificate. Called for every key entry a process reads: any key that is
+     * not imported, or whose chain is not the keybox's, is left alone.
+     */
+    public static void reportAttestedKeyAsGenerated(KeyMetadata metadata) {
+        if (metadata == null || metadata.authorizations == null
+                || metadata.certificateChain == null) {
+            return;
+        }
+        Authorization origin = null;
+        for (Authorization a : metadata.authorizations) {
+            if (a != null && a.keyParameter != null && a.keyParameter.tag == Tag.ORIGIN
+                    && a.keyParameter.value != null
+                    && a.keyParameter.value.getTag() == KeyParameterValue.origin
+                    && a.keyParameter.value.getOrigin() == KeyOrigin.IMPORTED) {
+                origin = a;
+                break;
+            }
+        }
+        if (origin == null || android.os.UserHandle.getAppId(android.os.Process.myUid())
+                        == android.os.Process.SYSTEM_UID
+                || !containsBytes(metadata.certificate, ATTESTATION_OID_DER)) {
+            return;
+        }
+        try {
+            // Only target apps get the keybox from SpoofManager, so in any other
+            // process there is none and the key stays as it is.
+            final KeyBoxManager keyboxes = getInstance().getKeyBoxManager();
+            if (keyboxes == null || !keyboxes.hasKeyboxes()) {
+                return;
+            }
+            boolean signedByKeybox = false;
+            for (String algorithm : new String[] {"EC", "RSA"}) {
+                final KeyBoxManager.KeyBox keybox = keyboxes.getKeybox(algorithm);
+                if (keybox != null && !keybox.certificates.isEmpty()
+                        && startsWith(metadata.certificateChain,
+                                keybox.certificates.get(0).getEncoded())) {
+                    signedByKeybox = true;
+                    break;
+                }
+            }
+            if (!signedByKeybox) {
+                return;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Could not check the origin of a key entry", e);
+            return;
+        }
+        origin.keyParameter.value = KeyParameterValue.origin(KeyOrigin.GENERATED);
+    }
+
+    // DER of OID 1.3.6.1.4.1.11129.2.1.17, the Android key attestation extension
+    private static final byte[] ATTESTATION_OID_DER = {
+            0x06, 0x0A, 0x2B, 0x06, 0x01, 0x04, 0x01, (byte) 0xD6, 0x79, 0x02, 0x01, 0x11};
+
+    /** Whether the bytes contain the needle anywhere. */
+    private static boolean containsBytes(byte[] data, byte[] needle) {
+        if (data == null || data.length < needle.length) return false;
+        outer:
+        for (int i = 0; i + needle.length <= data.length; i++) {
+            for (int j = 0; j < needle.length; j++) {
+                if (data[i + j] != needle[j]) continue outer;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean startsWith(byte[] data, byte[] prefix) {
+        if (data == null || prefix == null || prefix.length == 0
+                || data.length < prefix.length) {
+            return false;
+        }
+        for (int i = 0; i < prefix.length; i++) {
+            if (data[i] != prefix[i]) return false;
+        }
+        return true;
     }
 
     /**
