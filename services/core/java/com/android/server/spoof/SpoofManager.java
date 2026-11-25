@@ -16,8 +16,6 @@
 package com.android.server.spoof;
 
 import android.app.ActivityManager;
-import android.app.ActivityTaskManager;
-import android.app.TaskStackListener;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -58,11 +56,12 @@ public class SpoofManager {
             Settings.Secure.SPOOF_TRICKYSTORE_PATCH,
     };
 
-    // Spoofing stays off until the user opens Settings for the first time after
-    // setup. The flag is persisted, so later boots start spoofing straight away;
-    // a clean flash wipes /data and the flag with it.
+    // Spoofing stays off while setup runs, so Setup Wizard never loses Google Play
+    // services, and turns on by itself once setup is finished (or straight away on a
+    // device that is already set up, such as after an update). The flag is persisted;
+    // a clean flash wipes /data and the flag with it. The two switches below still
+    // turn either side off for good, for example under a root module.
     private static final String ACTIVATED_KEY = "spoof_activated";
-    private static final String SETTINGS_PACKAGE = "com.android.settings";
 
     // The Play Integrity Fix and TrickyStore switches of the Settings page
     // (Settings.System, on unless 0). Off hands out no config to that side.
@@ -119,13 +118,12 @@ public class SpoofManager {
     };
 
     private BroadcastReceiver mPackageAddedReceiver;
-    // Nothing spoof-related runs until the user first opens Settings (after setup):
-    // the config getters below return null and GMS is left alone. Set once by
-    // enableSpoofing() and persisted in ACTIVATED_KEY.
+    // Nothing spoof-related runs until setup is finished: the config getters below
+    // return null and GMS is left alone. Set once and persisted in ACTIVATED_KEY.
     private volatile boolean mActivated;
     private volatile boolean mPifEnabled = true;
     private volatile boolean mTrickyStoreEnabled = true;
-    private TaskStackListener mTaskListener;
+    private ContentObserver mSetupObserver;
 
     private final Map<String, String> mCache = new ConcurrentHashMap<>();
     private volatile Map<String, TrickyStoreService.Mode> mTargets = Collections.emptyMap();
@@ -185,6 +183,13 @@ public class SpoofManager {
 
         mActivated = Settings.Secure.getIntForUser(
                 mResolver, ACTIVATED_KEY, 0, UserHandle.USER_SYSTEM) != 0;
+        if (!mActivated && isDeviceProvisioned()) {
+            // Set up before (an update, or a build that waited for Settings): on now.
+            // Nothing of GMS runs yet, so there is nothing to restart.
+            mActivated = true;
+            Settings.Secure.putIntForUser(mResolver, ACTIVATED_KEY, 1, UserHandle.USER_SYSTEM);
+            Log.i(TAG, "Device already set up, enabling spoofing");
+        }
         if (mActivated) {
             seedDefaultTargetsIfUnset();
             if (mPifEnabled) {
@@ -193,8 +198,8 @@ public class SpoofManager {
                 clearPifPropOverrides();
             }
         } else {
-            Log.i(TAG, "Spoofing off until Settings is opened for the first time");
-            registerSettingsWatcher();
+            Log.i(TAG, "Spoofing off until setup is finished");
+            registerSetupWatcher();
         }
 
         mPackageAddedReceiver = new BroadcastReceiver() {
@@ -219,41 +224,28 @@ public class SpoofManager {
     }
 
     /**
-     * Watches for the first time the user brings Settings to the front. Only
-     * counts once setup is finished: Setup Wizard opens Settings screens (lock
-     * screen, fingerprint) and must not trigger the GMS restart.
+     * Watches for the end of setup (device provisioned and user setup complete) on a
+     * fresh install, so spoofing turns on by itself without waiting for Settings.
      */
-    private void registerSettingsWatcher() {
-        mTaskListener = new TaskStackListener() {
+    private void registerSetupWatcher() {
+        mSetupObserver = new ContentObserver(mHandler) {
             @Override
-            public void onTaskMovedToFront(ActivityManager.RunningTaskInfo taskInfo) {
-                if (mActivated || taskInfo == null) return;
-                final String pkg = taskInfo.topActivity != null
-                        ? taskInfo.topActivity.getPackageName()
-                        : (taskInfo.baseActivity != null
-                                ? taskInfo.baseActivity.getPackageName() : null);
-                if (!SETTINGS_PACKAGE.equals(pkg)) return;
-                mHandler.post(() -> {
-                    if (!mActivated && isDeviceProvisioned()) enableSpoofing();
-                });
+            public void onChange(boolean selfChange, Uri uri) {
+                if (!mActivated && isDeviceProvisioned()) enableSpoofing();
             }
         };
-        try {
-            ActivityTaskManager.getService().registerTaskStackListener(mTaskListener);
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to watch for Settings launch, spoofing stays off", e);
-            mTaskListener = null;
-        }
+        mResolver.registerContentObserver(
+                Settings.Global.getUriFor(Settings.Global.DEVICE_PROVISIONED),
+                false, mSetupObserver, UserHandle.USER_ALL);
+        mResolver.registerContentObserver(
+                Settings.Secure.getUriFor(Settings.Secure.USER_SETUP_COMPLETE),
+                false, mSetupObserver, UserHandle.USER_ALL);
     }
 
-    private void unregisterSettingsWatcher() {
-        if (mTaskListener == null) return;
-        try {
-            ActivityTaskManager.getService().unregisterTaskStackListener(mTaskListener);
-        } catch (Exception e) {
-            Log.w(TAG, "Failed to unregister Settings watcher", e);
-        }
-        mTaskListener = null;
+    private void unregisterSetupWatcher() {
+        if (mSetupObserver == null) return;
+        mResolver.unregisterContentObserver(mSetupObserver);
+        mSetupObserver = null;
     }
 
     /**
@@ -265,8 +257,8 @@ public class SpoofManager {
         if (mActivated) return;
         mActivated = true;
         Settings.Secure.putIntForUser(mResolver, ACTIVATED_KEY, 1, UserHandle.USER_SYSTEM);
-        unregisterSettingsWatcher();
-        Log.i(TAG, "Settings opened, enabling spoofing");
+        unregisterSetupWatcher();
+        Log.i(TAG, "Setup finished, enabling spoofing");
         PlayIntegritySpoofService.getInstance().loadConfig();
         TrickyStoreService.getInstance().initialize();
         seedDefaultTargetsIfUnset();
@@ -430,7 +422,7 @@ public class SpoofManager {
     }
 
     private void killGmsFamily() {
-        // Never touch GMS/GSF before spoofing is activated (first Settings launch),
+        // Never touch GMS/GSF before spoofing is activated (the end of setup),
         // so Setup Wizard is never disturbed.
         if (!mActivated) {
             Log.i(TAG, "Spoofing not activated, skipping GMS restart");
