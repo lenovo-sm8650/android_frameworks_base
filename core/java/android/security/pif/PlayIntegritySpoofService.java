@@ -88,11 +88,10 @@ public final class PlayIntegritySpoofService {
     // attestation done in AndroidKeyStoreSpi for a device that has one.
     private volatile boolean mSpoofProvider = false;
     private volatile boolean mSpoofSignature = false;
-    // Replaces the old all-or-nothing "spoofVendingBuild" boolean. This now matches
-    // upstream PlayIntegrityFork semantics: "0"/empty = disabled (default), "1"/"true" =
-    // spoof the configured FINGERPRINT field only, or any other value = use that literal
-    // string as a custom FINGERPRINT to serve to Play Store instead of the DroidGuard one.
-    private volatile String mSpoofVendingFinger = "0";
+    // Replaces the old all-or-nothing "spoofVendingBuild" boolean. "0"/empty = disabled,
+    // "1"/"true" = spoof the configured FINGERPRINT field (default, needed when the stock
+    // ROM fingerprint is not Play-certified), or any other value = literal FINGERPRINT.
+    private volatile String mSpoofVendingFinger = "1";
     // 0 = disabled, 1 = spoof Play Store's SDK_INT to 32, N > 1 = spoof it to N.
     // Never raises SDK_INT above the real one.
     private volatile int mSpoofVendingSdk = 0;
@@ -145,6 +144,7 @@ public final class PlayIntegritySpoofService {
     public synchronized void loadConfig() {
         mLastLoadAttempt = SystemClock.uptimeMillis();
         mBuildFields.clear();
+        mSpoofVendingFinger = "1";
         mConfigLoaded = false;
 
         IActivityManager am = ActivityManager.getService();
@@ -434,8 +434,8 @@ public final class PlayIntegritySpoofService {
      * Returns null if vending fingerprint spoofing is disabled.
      *
      * spoofVendingFinger may be:
-     *   "0" / "false" / empty -> disabled (default)
-     *   "1" / "true"          -> use the same FINGERPRINT configured for DroidGuard
+     *   "0" / "false" / empty -> disabled
+     *   "1" / "true"          -> use the same FINGERPRINT configured for DroidGuard (default)
      *   anything else          -> treated as a literal custom FINGERPRINT value
      */
     private String resolveVendingFingerprint() {
